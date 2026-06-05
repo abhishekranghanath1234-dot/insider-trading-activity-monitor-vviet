@@ -1,0 +1,16 @@
+signal_date,issuer_name,sector,market_value,conviction_score,insider_signal,institutional_signal,signal_strength,risk_score,recommendation
+2026-01-01,NVIDIA,Technology,250000000,95,BUY,STRONG BUY,98,12,STRONG BUY
+2026-01-01,Microsoft,Technology,220000000,92,BUY,BUY,94,15,BUY
+2026-01-01,Amazon,Consumer,210000000,90,SELL,BUY,85,25,HOLD
+2026-01-01,Apple,Technology,200000000,88,BUY,BUY,90,18,BUY
+2026-01-01,Alphabet,Technology,180000000,85,HOLD,BUY,82,22,HOLD
+2026-01-01,Meta,Technology,175000000,87,BUY,BUY,88,20,BUY
+2026-01-01,Tesla,Automotive,160000000,82,SELL,HOLD,75,35,HOLD
+2026-01-01,Broadcom,Technology,145000000,84,BUY,BUY,86,19,BUY
+2026-01-01,Netflix,Communication,120000000,80,HOLD,HOLD,72,28,HOLD
+2026-01-01,Adobe,Technology,110000000,79,BUY,HOLD,76,24,HOLD
+2026-01-01,Salesforce,Technology,105000000,78,BUY,BUY,79,23,BUY
+2026-01-01,Oracle,Technology,98000000,76,HOLD,HOLD,70,27,HOLD
+2026-01-01,AMD,Technology,95000000,77,BUY,BUY,80,21,BUY
+2026-01-01,Palantir,Technology,90000000,81,BUY,STRONG BUY,91,17,BUY
+2026-01-01,Snowflake,Technology,85000000,74,HOLD,HOLD,68,30,HOLD

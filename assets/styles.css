@@ -1,1 +1,264 @@
+/* ==========================================
+   SMART MONEY DASHBOARD THEME
+========================================== */
 
+:root {
+    --primary: #2563eb;
+    --secondary: #10b981;
+    --dark: #0f172a;
+    --card: #1e293b;
+    --text: #f8fafc;
+    --border: #334155;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+}
+
+/* ==========================================
+   MAIN APP
+========================================== */
+
+.stApp {
+    background: linear-gradient(
+        135deg,
+        #0f172a 0%,
+        #1e293b 50%,
+        #0f172a 100%
+    );
+    color: var(--text);
+}
+
+/* ==========================================
+   HEADINGS
+========================================== */
+
+h1 {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}
+
+h2,
+h3 {
+    color: #60a5fa !important;
+    font-weight: 600 !important;
+}
+
+/* ==========================================
+   KPI CARDS
+========================================== */
+
+.kpi-card {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    box-shadow: 0px 4px 20px rgba(0,0,0,0.25);
+}
+
+.kpi-value {
+    font-size: 28px;
+    font-weight: bold;
+    color: white;
+}
+
+.kpi-label {
+    color: #94a3b8;
+    font-size: 14px;
+}
+
+/* ==========================================
+   SIDEBAR
+========================================== */
+
+section[data-testid="stSidebar"] {
+    background: #111827;
+    border-right: 1px solid #374151;
+}
+
+section[data-testid="stSidebar"] * {
+    color: white !important;
+}
+
+/* ==========================================
+   BUTTONS
+========================================== */
+
+.stButton > button {
+    background: linear-gradient(
+        90deg,
+        #2563eb,
+        #10b981
+    );
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 0.6rem 1rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(37,99,235,0.5);
+}
+
+/* ==========================================
+   DOWNLOAD BUTTON
+========================================== */
+
+.stDownloadButton > button {
+    background: linear-gradient(
+        90deg,
+        #10b981,
+        #22c55e
+    );
+    color: white;
+    border-radius: 10px;
+    border: none;
+}
+
+/* ==========================================
+   DATAFRAME
+========================================== */
+
+[data-testid="stDataFrame"] {
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid #334155;
+}
+
+/* ==========================================
+   METRIC CONTAINERS
+========================================== */
+
+[data-testid="metric-container"] {
+    background: rgba(30,41,59,0.9);
+    border: 1px solid #334155;
+    padding: 15px;
+    border-radius: 15px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+[data-testid="metric-container"] label {
+    color: #cbd5e1 !important;
+}
+
+[data-testid="metric-container"] div {
+    color: white !important;
+}
+
+/* ==========================================
+   ALERTS
+========================================== */
+
+.stSuccess {
+    border-radius: 12px;
+}
+
+.stWarning {
+    border-radius: 12px;
+}
+
+.stInfo {
+    border-radius: 12px;
+}
+
+.stError {
+    border-radius: 12px;
+}
+
+/* ==========================================
+   EXPANDERS
+========================================== */
+
+.streamlit-expanderHeader {
+    background-color: #1e293b;
+    border-radius: 10px;
+    color: white;
+}
+
+/* ==========================================
+   PLOTLY CHART CONTAINER
+========================================== */
+
+.js-plotly-plot {
+    border-radius: 16px;
+}
+
+/* ==========================================
+   TABLES
+========================================== */
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+}
+
+table th {
+    background-color: #1e293b;
+    color: white;
+}
+
+table td {
+    color: #e2e8f0;
+}
+
+/* ==========================================
+   CUSTOM HEADER
+========================================== */
+
+.dashboard-header {
+    background: linear-gradient(
+        90deg,
+        #2563eb,
+        #10b981
+    );
+    padding: 20px;
+    border-radius: 16px;
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.dashboard-header h1 {
+    margin: 0;
+    color: white;
+}
+
+.dashboard-header p {
+    color: rgba(255,255,255,0.8);
+}
+
+/* ==========================================
+   FOOTER
+========================================== */
+
+.footer {
+    text-align: center;
+    color: #94a3b8;
+    padding: 20px;
+    margin-top: 30px;
+    border-top: 1px solid #334155;
+}
+
+/* ==========================================
+   SCROLLBAR
+========================================== */
+
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: #1e293b;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #2563eb;
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #3b82f6;
+}

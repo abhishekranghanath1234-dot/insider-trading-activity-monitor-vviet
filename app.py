@@ -1,353 +1,275 @@
 import streamlit as st
-import pandas as pd
 from pathlib import Path
 
-# ---------------------------------
+# =====================================================
 # PAGE CONFIG
-# ---------------------------------
+# =====================================================
 
 st.set_page_config(
     page_title="Smart Money Surveillance",
-    page_icon="🧠",
+    page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# ---------------------------------
+# =====================================================
 # CUSTOM CSS
-# ---------------------------------
+# =====================================================
 
 css_file = Path("assets/styles.css")
 
 if css_file.exists():
-    with open(css_file) as f:
+    with open(css_file, "r", encoding="utf-8") as f:
         st.markdown(
             f"<style>{f.read()}</style>",
             unsafe_allow_html=True
         )
 
-# ---------------------------------
+# =====================================================
 # SIDEBAR
-# ---------------------------------
+# =====================================================
 
 with st.sidebar:
 
-    st.image(
-        "assets/logo.png",
-        use_container_width=True
-    )
+    logo_path = Path("assets/logo.png")
 
-    st.title("🧠 Smart Money")
+    if logo_path.exists():
+        st.image(str(logo_path), use_container_width=True)
+
+    st.title("Smart Money Surveillance")
 
     st.markdown("---")
 
     st.markdown(
         """
-        ### Platform Modules
+### Platform Modules
 
-        📊 Dashboard
+📊 Dashboard
 
-        👨‍💼 Insider Transactions
+👨‍💼 Insider Transactions
 
-        🏛 Institutional Holdings
+🏛 Institutional Holdings
 
-        📈 Smart Money Signals
+🚨 Smart Money Signals
 
-        🤖 AI Insights
-        """
+🤖 AI Insights
+"""
     )
 
     st.markdown("---")
 
-    st.success("Live Intelligence Platform")
+    st.info(
+        """
+Monitor institutional investors,
+insider trades, whale positions,
+and AI-powered investment signals.
+"""
+    )
 
-# ---------------------------------
-# LOAD DATA
-# ---------------------------------
+# =====================================================
+# HERO SECTION
+# =====================================================
 
-@st.cache_data
-def load_master():
-    try:
-        return pd.read_csv(
-            "data/MASTER_DATA_ENRICHED.csv"
-        )
-    except:
-        return pd.DataFrame()
+st.title("📈 Smart Money Surveillance Platform")
 
-@st.cache_data
-def load_signals():
-    try:
-        return pd.read_csv(
-            "data/PREMIUM_CROSS_MARKET_SIGNALS.csv"
-        )
-    except:
-        return pd.DataFrame()
+st.markdown(
+    """
+### Institutional Intelligence Platform
 
-master_df = load_master()
-signals_df = load_signals()
+Track:
 
-# ---------------------------------
-# HEADER
-# ---------------------------------
+- Insider Transactions
+- Institutional Holdings
+- Whale Activity
+- Conviction Scores
+- Smart Money Signals
+- AI Generated Insights
 
-st.title("🧠 Smart Money Surveillance Platform")
-
-st.caption(
-    "Institutional Holdings • Insider Activity • Cross-Market Signals • AI Intelligence"
+Built with Streamlit, Plotly, Pandas and AI.
+"""
 )
 
-st.markdown("---")
+st.divider()
 
-# ---------------------------------
-# KPI SECTION
-# ---------------------------------
-
-if not master_df.empty:
-
-    total_records = len(master_df)
-
-    total_companies = (
-        master_df["company_name"].nunique()
-        if "company_name" in master_df.columns
-        else 0
-    )
-
-    total_value = (
-        master_df["market_value"].sum()
-        if "market_value" in master_df.columns
-        else 0
-    )
-
-    avg_conviction = (
-        master_df["conviction_score"].mean()
-        if "conviction_score" in master_df.columns
-        else 0
-    )
-
-else:
-
-    total_records = 0
-    total_companies = 0
-    total_value = 0
-    avg_conviction = 0
+# =====================================================
+# OVERVIEW CARDS
+# =====================================================
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     st.metric(
-        "Total Filings",
-        f"{total_records:,}"
+        "Modules",
+        "5"
     )
 
 with col2:
     st.metric(
-        "Companies",
-        f"{total_companies:,}"
+        "Analytics",
+        "25+"
     )
 
 with col3:
     st.metric(
-        "Portfolio Value",
-        f"${total_value/1e9:.2f}B"
+        "Charts",
+        "15+"
     )
 
 with col4:
     st.metric(
-        "Avg Conviction",
-        f"{avg_conviction:.2f}"
+        "AI Reports",
+        "Enabled"
     )
 
-st.markdown("---")
+st.divider()
 
-# ---------------------------------
-# DATASET OVERVIEW
-# ---------------------------------
+# =====================================================
+# FEATURE GRID
+# =====================================================
 
-col_left, col_right = st.columns([2, 1])
+col1, col2 = st.columns(2)
 
-with col_left:
+with col1:
 
-    st.subheader("📂 Available Datasets")
+    st.subheader("🏛 Institutional Intelligence")
 
-    datasets = pd.DataFrame(
-        {
-            "Dataset": [
-                "MASTER_DATA_ENRICHED",
-                "PREMIUM_CROSS_MARKET_SIGNALS"
-            ],
-            "Rows": [
-                len(master_df),
-                len(signals_df)
-            ]
-        }
-    )
-
-    st.dataframe(
-        datasets,
-        use_container_width=True
-    )
-
-with col_right:
-
-    st.subheader("📈 Coverage")
-
-    st.info(
-        f"""
-        Companies: {total_companies}
-
-        Holdings: {total_records}
-
-        Signals: {len(signals_df)}
+    st.markdown(
         """
+- Top Institutional Holders
+- Portfolio Allocation
+- Sector Analysis
+- Whale Tracking
+- Conviction Rankings
+"""
     )
 
-st.markdown("---")
+    st.subheader("👨‍💼 Insider Monitoring")
 
-# ---------------------------------
-# COLUMN INSPECTION
-# ---------------------------------
+    st.markdown(
+        """
+- Executive Purchases
+- Executive Sales
+- Confidence Scores
+- Transaction Timeline
+- Insider Sentiment
+"""
+    )
 
-st.subheader("🔍 Data Explorer")
+with col2:
 
-tab1, tab2 = st.tabs(
-    [
-        "MASTER_DATA_ENRICHED",
-        "PREMIUM_SIGNALS"
-    ]
+    st.subheader("🚨 Smart Money Signals")
+
+    st.markdown(
+        """
+- Signal Scoring Engine
+- Buy/Sell Recommendations
+- Opportunity Ranking
+- Sector Heatmaps
+- Cross-Market Analytics
+"""
+    )
+
+    st.subheader("🤖 AI Intelligence")
+
+    st.markdown(
+        """
+- Automated Reports
+- Whale Detection
+- Risk Analysis
+- GPT Insights
+- Investment Summaries
+"""
+    )
+
+st.divider()
+
+# =====================================================
+# DATASETS
+# =====================================================
+
+st.subheader("📂 Connected Datasets")
+
+datasets = [
+    "MASTER_DATA_ENRICHED.csv",
+    "PREMIUM_CROSS_MARKET_SIGNALS.csv",
+    "insider_transactions_data.csv",
+    "institutional_holdings_data.csv"
+]
+
+for dataset in datasets:
+    st.success(f"✓ {dataset}")
+
+st.divider()
+
+# =====================================================
+# QUICK START
+# =====================================================
+
+st.subheader("🚀 Quick Start")
+
+st.markdown(
+    """
+1. Open the sidebar navigation.
+2. Select Dashboard for overview analytics.
+3. Explore Insider Transactions.
+4. Review Institutional Holdings.
+5. Analyze Smart Money Signals.
+6. Generate AI Insights.
+"""
 )
 
-with tab1:
+st.divider()
 
-    if not master_df.empty:
+# =====================================================
+# PROJECT STRUCTURE
+# =====================================================
 
-        st.write("Rows:", len(master_df))
-        st.write("Columns:", len(master_df.columns))
+with st.expander("📁 Project Structure"):
 
-        selected_cols = st.multiselect(
-            "Choose Columns",
-            master_df.columns.tolist(),
-            default=master_df.columns[:10]
-        )
-
-        st.dataframe(
-            master_df[selected_cols],
-            use_container_width=True
-        )
-
-    else:
-        st.warning("MASTER_DATA_ENRICHED.csv not found.")
-
-with tab2:
-
-    if not signals_df.empty:
-
-        st.write("Rows:", len(signals_df))
-        st.write("Columns:", len(signals_df.columns))
-
-        selected_cols = st.multiselect(
-            "Signal Columns",
-            signals_df.columns.tolist(),
-            default=signals_df.columns[:10],
-            key="signal_cols"
-        )
-
-        st.dataframe(
-            signals_df[selected_cols],
-            use_container_width=True
-        )
-
-    else:
-        st.warning(
-            "PREMIUM_CROSS_MARKET_SIGNALS.csv not found."
-        )
-
-st.markdown("---")
-
-# ---------------------------------
-# TOP SIGNALS PREVIEW
-# ---------------------------------
-
-st.subheader("🚨 Smart Money Opportunities")
-
-if not signals_df.empty:
-
-    score_column = None
-
-    candidate_columns = [
-        "signal_score",
-        "conviction_score",
-        "score",
-        "strength"
-    ]
-
-    for col in candidate_columns:
-        if col in signals_df.columns:
-            score_column = col
-            break
-
-    if score_column:
-
-        top_signals = (
-            signals_df
-            .sort_values(
-                score_column,
-                ascending=False
-            )
-            .head(20)
-        )
-
-        st.dataframe(
-            top_signals,
-            use_container_width=True
-        )
-
-    else:
-
-        st.dataframe(
-            signals_df.head(20),
-            use_container_width=True
-        )
-
-else:
-
-    st.info(
-        "Signals dataset will appear here."
+    st.code(
+        """
+smart-money-surveillance/
+│
+├── app.py
+├── requirements.txt
+├── README.md
+│
+├── assets/
+│   ├── logo.png
+│   └── styles.css
+│
+├── data/
+│   ├── MASTER_DATA_ENRICHED.csv
+│   ├── PREMIUM_CROSS_MARKET_SIGNALS.csv
+│   ├── insider_transactions_data.csv
+│   └── institutional_holdings_data.csv
+│
+├── pages/
+│   ├── 1_Dashboard.py
+│   ├── 2_Insider_Transactions.py
+│   ├── 3_Institutional_Holdings.py
+│   ├── 4_Smart_Money_Signals.py
+│   └── 5_AI_Insights.py
+│
+└── utils/
+    ├── analytics.py
+    ├── charts.py
+    └── data_loader.py
+"""
     )
 
-st.markdown("---")
-
-# ---------------------------------
-# PLATFORM STATUS
-# ---------------------------------
-
-st.subheader("⚙️ System Status")
-
-status1, status2, status3 = st.columns(3)
-
-with status1:
-    st.success("Data Engine Online")
-
-with status2:
-    st.success("Analytics Ready")
-
-with status3:
-    st.success("Streamlit Running")
-
-# ---------------------------------
+# =====================================================
 # FOOTER
-# ---------------------------------
+# =====================================================
 
 st.markdown("---")
 
 st.markdown(
     """
-    <center>
+### 🧠 Smart Money Surveillance
 
-    <h4>🧠 Smart Money Surveillance Platform</h4>
+Institutional Holdings • Insider Trading • Smart Money Signals • AI Research
 
-    Institutional Holdings • Insider Tracking • AI Signals
-
-    </center>
-    """,
-    unsafe_allow_html=True
+Built using Streamlit + Plotly + Python
+"""
 )

@@ -1,0 +1,16 @@
+filing_id,company_name,ticker,owner_name,owner_title,transaction_date,transaction_code,transaction_type,shares,price_per_share,transaction_value,shares_owned_after,ownership_form,confidence_score,signal
+1001,NVIDIA Corp,NVDA,Jensen Huang,CEO,2025-02-01,P,Purchase,25000,720.50,18012500,3560000,Direct,95,STRONG BUY
+1002,Amazon.com Inc,AMZN,Andrew Jassy,CEO,2025-02-02,P,Purchase,15000,172.40,2586000,1250000,Direct,90,BUY
+1003,Microsoft Corp,MSFT,Satya Nadella,CEO,2025-02-03,P,Purchase,12000,412.30,4947600,890000,Direct,88,BUY
+1004,Alphabet Inc,GOOGL,Sundar Pichai,CEO,2025-02-03,P,Purchase,10000,148.90,1489000,760000,Direct,84,BUY
+1005,Apple Inc,AAPL,Tim Cook,CEO,2025-02-04,S,Sale,20000,188.25,3765000,3200000,Direct,40,HOLD
+1006,Meta Platforms,META,Mark Zuckerberg,CEO,2025-02-04,P,Purchase,8000,490.80,3926400,1400000,Direct,82,BUY
+1007,Tesla Inc,TSLA,Elon Musk,CEO,2025-02-05,S,Sale,50000,201.15,10057500,410000000,Direct,35,REDUCE
+1008,Berkshire Hathaway,BRK.B,Warren Buffett,Chairman,2025-02-05,P,Purchase,12000,415.30,4983600,225000,Direct,91,STRONG BUY
+1009,JPMorgan Chase,JPM,Jamie Dimon,CEO,2025-02-06,P,Purchase,10000,187.45,1874500,975000,Direct,87,BUY
+1010,Johnson & Johnson,JNJ,Joaquin Duato,CEO,2025-02-06,S,Sale,15000,158.60,2379000,410000,Direct,45,HOLD
+1011,Pfizer Inc,PFE,Albert Bourla,CEO,2025-02-07,S,Sale,25000,28.15,703750,650000,Direct,30,SELL
+1012,Intel Corp,INTC,Patrick Gelsinger,CEO,2025-02-07,P,Purchase,18000,42.75,769500,830000,Direct,72,WATCHLIST
+1013,AMD,AMD,Lisa Su,CEO,2025-02-08,P,Purchase,12000,168.90,2026800,740000,Direct,86,BUY
+1014,Netflix,NFLX,Ted Sarandos,CEO,2025-02-08,S,Sale,5000,612.75,3063750,210000,Direct,48,HOLD
+1015,Palantir,PLTR,Alex Karp,CEO,2025-02-09,P,Purchase,30000,24.80,744000,1250000,Direct,89,BUY

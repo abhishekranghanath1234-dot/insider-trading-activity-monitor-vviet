@@ -1,9 +1,0 @@
-streamlit>
-pandas>
-numpy>
-plotly>
-pyarrow>
-
-openpyxl>
-scikit-learn>
-scipy>

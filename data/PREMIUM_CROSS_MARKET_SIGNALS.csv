@@ -1,0 +1,13 @@
+signal_id,company_name,ticker,sector,signal_date,conviction_score,insider_score,institutional_score,market_value,signal_score,signal_strength,recommendation
+1,NVIDIA Corp,NVDA,Technology,2025-02-07,92.5,88.3,95.1,98000000,92.1,Very High,STRONG BUY
+2,Amazon.com Inc,AMZN,Consumer Discretionary,2025-02-07,89.4,84.7,90.2,125000000,89.1,Very High,STRONG BUY
+3,Microsoft Corp,MSFT,Technology,2025-02-07,87.2,81.5,88.9,76500000,86.7,High,BUY
+4,Alphabet Inc,GOOGL,Communication Services,2025-02-07,84.5,79.8,85.6,65000000,83.9,High,BUY
+5,Apple Inc,AAPL,Technology,2025-02-07,82.3,75.2,84.1,87500000,81.6,High,BUY
+6,Meta Platforms,META,Communication Services,2025-02-07,78.1,74.4,80.7,59000000,77.9,Medium,WATCHLIST
+7,Tesla Inc,TSLA,Consumer Discretionary,2025-02-07,72.4,68.3,74.1,48000000,71.8,Medium,WATCHLIST
+8,Berkshire Hathaway,BRK.B,Financials,2025-02-07,70.5,65.9,72.8,44000000,70.1,Medium,WATCHLIST
+9,JPMorgan Chase,JPM,Financials,2025-02-07,61.7,58.1,64.3,39000000,61.4,Low,HOLD
+10,Johnson & Johnson,JNJ,Healthcare,2025-02-07,45.2,43.8,48.6,22000000,45.9,Low,REDUCE
+11,Pfizer Inc,PFE,Healthcare,2025-02-07,38.6,40.1,36.4,18000000,38.4,Very Low,SELL
+12,Intel Corp,INTC,Technology,2025-02-07,31.4,28.7,34.2,15000000,31.9,Very Low,SELL

@@ -1,372 +1,433 @@
-```python id="ai_alerts_page_001"
-# pages/9_AI_Alerts.py
+ # pages/AI_Alerts.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
-import datetime as dt
+import plotly.express as px
+from sklearn.ensemble import IsolationForest
 
-from utils.data_loader import (
-    load_master_data,
-    load_insider_data,
-    load_holdings_data
-)
+from utils.data_loader import load_master_data
 
-from utils.risk_scoring import (
-    calculate_risk_score,
-    classify_risk
-)
-
-# --------------------------------------------------
+# -----------------------------------------------------
 # PAGE CONFIG
-# --------------------------------------------------
+# -----------------------------------------------------
 
 st.set_page_config(
     page_title="AI Alerts",
-    page_icon="🔔",
+    page_icon="🚨",
     layout="wide"
 )
 
-st.title("🔔 AI Smart Money Alerts Engine")
-st.markdown(
-    "Real-time AI-generated alerts for insider trading, "
-    "institutional flows, and risk anomalies."
+st.title("🚨 AI Alerts Center")
+st.caption(
+    "Real-Time Institutional Intelligence & Alert Engine"
 )
 
-# --------------------------------------------------
+# -----------------------------------------------------
 # LOAD DATA
-# --------------------------------------------------
+# -----------------------------------------------------
 
 @st.cache_data
-def load_data():
-    master = load_master_data()
-    insider = load_insider_data()
-    holdings = load_holdings_data()
-    return master, insider, holdings
+def get_data():
+    return load_master_data()
 
+df = get_data()
 
-master_df, insider_df, holdings_df = load_data()
+# -----------------------------------------------------
+# COMPANY COLUMN DETECTION
+# -----------------------------------------------------
 
-# --------------------------------------------------
-# VALIDATION
-# --------------------------------------------------
+company_col = None
 
-if master_df.empty or insider_df.empty:
-    st.error("Required datasets are missing.")
+for col in [
+    "company_name",
+    "issuer_name",
+    "company",
+    "issuer"
+]:
+    if col in df.columns:
+        company_col = col
+        break
+
+if company_col is None:
+    st.error("Company column not found.")
     st.stop()
 
-# --------------------------------------------------
-# ALERT CONFIG
-# --------------------------------------------------
+# -----------------------------------------------------
+# NUMERIC CLEANUP
+# -----------------------------------------------------
 
-st.sidebar.header("Alert Settings")
+numeric_cols = df.select_dtypes(
+    include=np.number
+).columns.tolist()
 
-risk_threshold = st.sidebar.slider(
-    "Risk Score Threshold",
-    min_value=0,
-    max_value=100,
-    value=60
-)
-
-buy_spike_threshold = st.sidebar.slider(
-    "Insider Buy Spike (%)",
-    min_value=10,
-    max_value=200,
-    value=50
-)
-
-sell_spike_threshold = st.sidebar.slider(
-    "Insider Sell Spike (%)",
-    min_value=10,
-    max_value=200,
-    value=50
-)
-
-# --------------------------------------------------
-# ALERT GENERATION
-# --------------------------------------------------
-
-alerts = []
-
-# Ensure datetime
-if "TransactionDate" in insider_df.columns:
-    insider_df["TransactionDate"] = pd.to_datetime(
-        insider_df["TransactionDate"],
+for col in numeric_cols:
+    df[col] = pd.to_numeric(
+        df[col],
         errors="coerce"
     )
 
-# Group by company
-for company in master_df["Company"].dropna().unique():
+df[numeric_cols] = (
+    df[numeric_cols]
+    .replace([np.inf, -np.inf], np.nan)
+    .fillna(0)
+)
 
-    company_master = master_df[
-        master_df["Company"] == company
-    ]
+# -----------------------------------------------------
+# ANOMALY DETECTION
+# -----------------------------------------------------
 
-    if company_master.empty:
-        continue
+features = []
 
-    row = company_master.iloc[0]
+for col in [
+    "market_value",
+    "conviction_score",
+    "shares_owned",
+    "shares_change",
+    "ownership_percentage"
+]:
+    if col in df.columns:
+        features.append(col)
 
-    try:
-        risk_score = calculate_risk_score(row)
-    except:
-        risk_score = 50
+if len(features) >= 2:
 
-    risk_label = classify_risk(risk_score)
+    iso = IsolationForest(
+        contamination=0.03,
+        random_state=42
+    )
 
-    insider_company = insider_df[
-        insider_df["Company"] == company
-    ] if "Company" in insider_df.columns else pd.DataFrame()
+    df["anomaly_flag"] = iso.fit_predict(
+        df[features]
+    )
 
-    buy_count = 0
-    sell_count = 0
-
-    if not insider_company.empty:
-
-        buy_count = len(
-            insider_company[
-                insider_company["TransactionType"]
-                .astype(str)
-                .str.upper()
-                .str.contains("BUY")
-            ]
+    df["anomaly_score"] = (
+        iso.decision_function(
+            df[features]
         )
+    )
 
-        sell_count = len(
-            insider_company[
-                insider_company["TransactionType"]
-                .astype(str)
-                .str.upper()
-                .str.contains("SELL")
-            ]
-        )
+else:
 
-    # --------------------------------------------------
-    # ALERT LOGIC
-    # --------------------------------------------------
+    df["anomaly_flag"] = 1
+    df["anomaly_score"] = 0
 
-    if risk_score >= risk_threshold:
+# -----------------------------------------------------
+# ALERT ENGINE
+# -----------------------------------------------------
+
+alerts = []
+
+for _, row in df.iterrows():
+
+    company = row.get(company_col, "Unknown")
+
+    # High Conviction Alert
+    if (
+        "conviction_score" in df.columns
+        and row.get("conviction_score", 0) > 85
+    ):
+        alerts.append({
+            "Company": company,
+            "Alert Type":
+            "High Conviction",
+            "Priority": "High",
+            "Message":
+            "Institutional conviction extremely strong."
+        })
+
+    # Ownership Concentration
+    if (
+        "ownership_percentage" in df.columns
+        and row.get(
+            "ownership_percentage",
+            0
+        ) > 20
+    ):
+        alerts.append({
+            "Company": company,
+            "Alert Type":
+            "Ownership Concentration",
+            "Priority": "Medium",
+            "Message":
+            "Institutional ownership highly concentrated."
+        })
+
+    # Large Position Increase
+    if (
+        "shares_change" in df.columns
+        and row.get(
+            "shares_change",
+            0
+        ) > 100000
+    ):
+        alerts.append({
+            "Company": company,
+            "Alert Type":
+            "Accumulation Signal",
+            "Priority": "High",
+            "Message":
+            "Large institutional buying activity detected."
+        })
+
+    # Large Position Reduction
+    if (
+        "shares_change" in df.columns
+        and row.get(
+            "shares_change",
+            0
+        ) < -100000
+    ):
+        alerts.append({
+            "Company": company,
+            "Alert Type":
+            "Distribution Signal",
+            "Priority": "High",
+            "Message":
+            "Large institutional selling activity detected."
+        })
+
+    # Anomaly Alert
+    if row["anomaly_flag"] == -1:
 
         alerts.append({
             "Company": company,
-            "Type": "HIGH RISK",
-            "Severity": "RED",
-            "Message": f"Risk score {risk_score:.1f} exceeds threshold",
-            "RiskScore": risk_score
+            "Alert Type":
+            "Anomaly Detected",
+            "Priority": "Critical",
+            "Message":
+            "Unusual behavior identified by AI engine."
         })
 
-    if buy_count >= buy_spike_threshold:
+# -----------------------------------------------------
+# ALERT DATAFRAME
+# -----------------------------------------------------
 
-        alerts.append({
-            "Company": company,
-            "Type": "INSIDER BUY SPIKE",
-            "Severity": "GREEN",
-            "Message": f"Unusual insider buying activity detected ({buy_count} buys)",
-            "RiskScore": risk_score
-        })
+alerts_df = pd.DataFrame(alerts)
 
-    if sell_count >= sell_spike_threshold:
+if alerts_df.empty:
 
-        alerts.append({
-            "Company": company,
-            "Type": "INSIDER SELL SPIKE",
-            "Severity": "ORANGE",
-            "Message": f"High insider selling pressure ({sell_count} sells)",
-            "RiskScore": risk_score
-        })
+    st.success(
+        "No significant alerts detected."
+    )
+    st.stop()
 
-    # Institutional anomaly (simple heuristic)
-    if "InstitutionalOwnership" in row:
-
-        if pd.notna(row["InstitutionalOwnership"]):
-
-            if row["InstitutionalOwnership"] < 15:
-
-                alerts.append({
-                    "Company": company,
-                    "Type": "LOW INSTITUTIONAL SUPPORT",
-                    "Severity": "ORANGE",
-                    "Message": "Very low institutional ownership detected",
-                    "RiskScore": risk_score
-                })
-
-# --------------------------------------------------
-# ALERT SUMMARY
-# --------------------------------------------------
+# -----------------------------------------------------
+# SUMMARY KPIs
+# -----------------------------------------------------
 
 st.subheader("📊 Alert Summary")
 
-total_alerts = len(alerts)
+c1, c2, c3, c4 = st.columns(4)
 
-red_alerts = len([a for a in alerts if a["Severity"] == "RED"])
-green_alerts = len([a for a in alerts if a["Severity"] == "GREEN"])
-orange_alerts = len([a for a in alerts if a["Severity"] == "ORANGE"])
+c1.metric(
+    "Total Alerts",
+    len(alerts_df)
+)
 
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric("Total Alerts", total_alerts)
-col2.metric("🔴 High Risk", red_alerts)
-col3.metric("🟢 Buy Signals", green_alerts)
-col4.metric("🟠 Warning Signals", orange_alerts)
-
-st.markdown("---")
-
-# --------------------------------------------------
-# ALERT FEED
-# --------------------------------------------------
-
-st.subheader("🚨 Live Alert Feed")
-
-if not alerts:
-    st.success("No alerts triggered at current thresholds.")
-else:
-
-    alerts_df = pd.DataFrame(alerts)
-
-    severity_color = {
-        "RED": "🔴",
-        "ORANGE": "🟠",
-        "GREEN": "🟢"
-    }
-
-    alerts_df["SeverityIcon"] = alerts_df["Severity"].map(severity_color)
-
-    for _, alert in alerts_df.sort_values(
-        by="RiskScore",
-        ascending=False
-    ).iterrows():
-
-        st.markdown(
-            f"""
-            ### {alert['SeverityIcon']} {alert['Type']}
-            **Company:** {alert['Company']}
-
-            **Message:** {alert['Message']}
-
-            **Risk Score:** {alert['RiskScore']:.1f}
-            """
-        )
-
-        st.markdown("---")
-
-# --------------------------------------------------
-# ALERT ANALYTICS
-# --------------------------------------------------
-
-if alerts:
-
-    st.subheader("📈 Alert Analytics")
-
-    chart_df = pd.DataFrame(alerts)
-
-    fig = px.bar(
-        chart_df,
-        x="Type",
-        color="Severity",
-        title="Alert Distribution by Type"
+c2.metric(
+    "Critical",
+    len(
+        alerts_df[
+            alerts_df["Priority"]
+            == "Critical"
+        ]
     )
+)
 
-    st.plotly_chart(fig, use_container_width=True)
-
-    fig2 = px.histogram(
-        chart_df,
-        x="RiskScore",
-        nbins=20,
-        title="Risk Score Distribution of Alerts"
+c3.metric(
+    "High",
+    len(
+        alerts_df[
+            alerts_df["Priority"]
+            == "High"
+        ]
     )
+)
 
-    st.plotly_chart(fig2, use_container_width=True)
+c4.metric(
+    "Medium",
+    len(
+        alerts_df[
+            alerts_df["Priority"]
+            == "Medium"
+        ]
+    )
+)
 
-# --------------------------------------------------
+# -----------------------------------------------------
+# ALERT BREAKDOWN
+# -----------------------------------------------------
+
+st.subheader("Alert Categories")
+
+alert_counts = (
+    alerts_df["Alert Type"]
+    .value_counts()
+    .reset_index()
+)
+
+alert_counts.columns = [
+    "Alert Type",
+    "Count"
+]
+
+fig1 = px.bar(
+    alert_counts,
+    x="Alert Type",
+    y="Count",
+    color="Alert Type",
+    title="AI Alert Distribution"
+)
+
+st.plotly_chart(
+    fig1,
+    use_container_width=True
+)
+
+# -----------------------------------------------------
+# PRIORITY BREAKDOWN
+# -----------------------------------------------------
+
+st.subheader("Priority Distribution")
+
+priority_df = (
+    alerts_df["Priority"]
+    .value_counts()
+    .reset_index()
+)
+
+priority_df.columns = [
+    "Priority",
+    "Count"
+]
+
+fig2 = px.pie(
+    priority_df,
+    names="Priority",
+    values="Count",
+    title="Alert Priority Levels"
+)
+
+st.plotly_chart(
+    fig2,
+    use_container_width=True
+)
+
+# -----------------------------------------------------
+# FILTERS
+# -----------------------------------------------------
+
+st.subheader("🔍 Alert Explorer")
+
+priority_filter = st.multiselect(
+    "Filter Priority",
+    sorted(
+        alerts_df["Priority"]
+        .unique()
+    ),
+    default=sorted(
+        alerts_df["Priority"]
+        .unique()
+    )
+)
+
+filtered_alerts = alerts_df[
+    alerts_df["Priority"]
+    .isin(priority_filter)
+]
+
+st.dataframe(
+    filtered_alerts,
+    use_container_width=True,
+    height=500
+)
+
+# -----------------------------------------------------
 # TOP ALERT COMPANIES
-# --------------------------------------------------
+# -----------------------------------------------------
 
-if alerts:
+st.subheader("🏆 Most Alerted Companies")
 
-    st.subheader("🏢 Companies with Most Alerts")
-
-    company_alerts = (
-        pd.DataFrame(alerts)
-        .groupby("Company")
-        .size()
-        .reset_index(name="AlertCount")
-        .sort_values("AlertCount", ascending=False)
+top_alerts = (
+    alerts_df.groupby("Company")
+    .size()
+    .reset_index(name="Alert Count")
+    .sort_values(
+        "Alert Count",
+        ascending=False
     )
+    .head(20)
+)
 
-    st.dataframe(company_alerts, use_container_width=True)
+fig3 = px.bar(
+    top_alerts,
+    x="Company",
+    y="Alert Count",
+    title="Companies Generating Most Alerts"
+)
 
-# --------------------------------------------------
-# AI ALERT SUMMARY
-# --------------------------------------------------
+st.plotly_chart(
+    fig3,
+    use_container_width=True
+)
 
-st.subheader("🤖 AI Alert Summary")
+# -----------------------------------------------------
+# AI INSIGHTS
+# -----------------------------------------------------
 
-if total_alerts == 0:
+st.subheader("🤖 AI Insights")
 
-    summary = """
-### SYSTEM STATUS: NORMAL
+critical_count = len(
+    alerts_df[
+        alerts_df["Priority"]
+        == "Critical"
+    ]
+)
 
-No abnormal market activity detected
-based on current thresholds.
+high_count = len(
+    alerts_df[
+        alerts_df["Priority"]
+        == "High"
+    ]
+)
 
-- Insider activity within normal range
-- Risk scores stable
-- No institutional anomalies
-"""
+st.info(f"""
+Total AI alerts generated: {len(alerts_df)}
 
-elif red_alerts > 0:
+Critical alerts detected: {critical_count}
 
-    summary = f"""
-### SYSTEM STATUS: HIGH ALERT
+High-priority alerts detected: {high_count}
 
-{red_alerts} high-risk conditions detected.
+The AI engine continuously monitors:
 
-Immediate attention recommended.
+• Conviction Score Changes
 
-Key risks:
+• Institutional Accumulation
 
-- Elevated risk scores
-- Potential insider activity concerns
-- Market instability signals
+• Institutional Distribution
 
-Action:
-Review flagged companies immediately.
-"""
+• Ownership Concentration
 
-else:
+• Statistical Anomalies
 
-    summary = f"""
-### SYSTEM STATUS: MONITORING
+Companies generating repeated alerts
+may require additional due diligence
+and deeper institutional analysis.
+""")
 
-System has detected {total_alerts} alerts.
+# -----------------------------------------------------
+# DOWNLOAD REPORT
+# -----------------------------------------------------
 
-Most signals are moderate risk.
+st.subheader("📥 Export Alerts")
 
-Recommended:
+csv = alerts_df.to_csv(
+    index=False
+).encode("utf-8")
 
-- Continue monitoring
-- Review insider activity trends
-- Adjust thresholds if needed
-"""
-
-st.markdown(summary)
-
-# --------------------------------------------------
-# DOWNLOAD ALERTS
-# --------------------------------------------------
-
-st.markdown("---")
-
-if alerts:
-
-    alerts_df = pd.DataFrame(alerts)
-
-    csv = alerts_df.to_csv(index=False).encode("utf-8")
-
-    st.download_button(
-        label="⬇ Download Alerts Report",
-        data=csv,
-        file_name="ai_alerts_report.csv",
-        mime="text/csv"
-    )
-```
+st.download_button(
+    label="Download AI Alerts Report",
+    data=csv,
+    file_name="AI_Alerts_Report.csv",
+    mime="text/csv"
+)

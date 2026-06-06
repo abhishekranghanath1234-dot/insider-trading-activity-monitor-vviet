@@ -1,5 +1,4 @@
-```python
-# pages/6_Company_Comparison.py
+ # pages/Company_Comparison.py
 
 import streamlit as st
 import pandas as pd
@@ -7,16 +6,7 @@ import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
 
-from utils.data_loader import (
-    load_master_data,
-    load_insider_data,
-    load_holdings_data
-)
-
-from utils.risk_scoring import (
-    calculate_risk_score,
-    classify_risk
-)
+from utils.data_loader import load_master_data
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -28,459 +18,364 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("⚖️ Company Comparison Engine")
-st.markdown(
-    "Compare multiple companies across financial metrics, "
-    "risk scores, insider activity, and institutional ownership."
-)
+st.title("⚖️ Company Comparison Dashboard")
 
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
 
 @st.cache_data
-def load_data():
-    master = load_master_data()
-    insider = load_insider_data()
-    holdings = load_holdings_data()
-    return master, insider, holdings
+def get_data():
+    return load_master_data()
 
-
-master_df, insider_df, holdings_df = load_data()
+df = get_data()
 
 # --------------------------------------------------
-# VALIDATION
+# IDENTIFY COMPANY COLUMN
 # --------------------------------------------------
 
-if master_df.empty:
-    st.error("MASTER_DATA_ENRICHED.csv not found.")
-    st.stop()
+company_col = None
 
-if "Company" not in master_df.columns:
-    st.error("Column 'Company' not found.")
+possible_cols = [
+    "company_name",
+    "issuer_name",
+    "company",
+    "issuer"
+]
+
+for col in possible_cols:
+    if col in df.columns:
+        company_col = col
+        break
+
+if company_col is None:
+    st.error("Company column not found.")
     st.stop()
 
 # --------------------------------------------------
 # COMPANY SELECTION
 # --------------------------------------------------
 
-company_list = sorted(
-    master_df["Company"]
+companies = sorted(
+    df[company_col]
     .dropna()
+    .astype(str)
     .unique()
 )
 
-st.sidebar.header("Comparison Settings")
-
-selected_companies = st.sidebar.multiselect(
-    "Select Companies (2-5)",
-    company_list,
-    default=company_list[:3]
+selected_companies = st.multiselect(
+    "Select Companies To Compare",
+    companies,
+    default=companies[:3]
 )
 
 if len(selected_companies) < 2:
-    st.warning("Please select at least 2 companies.")
+    st.warning("Select at least 2 companies.")
     st.stop()
 
-if len(selected_companies) > 5:
-    st.warning("Maximum 5 companies allowed.")
-    st.stop()
-
-# --------------------------------------------------
-# FILTER DATA
-# --------------------------------------------------
-
-comparison_df = master_df[
-    master_df["Company"].isin(selected_companies)
-].copy()
-
-# --------------------------------------------------
-# BUILD COMPARISON DATASET
-# --------------------------------------------------
-
-comparison_rows = []
-
-for _, row in comparison_df.iterrows():
-
-    company = row["Company"]
-
-    try:
-        risk_score = calculate_risk_score(row)
-    except:
-        risk_score = 50
-
-    # Insider Stats
-    buy_count = 0
-    sell_count = 0
-
-    if not insider_df.empty:
-
-        insider_company = insider_df[
-            insider_df["Company"] == company
-        ]
-
-        if (
-            not insider_company.empty
-            and "TransactionType" in insider_company.columns
-        ):
-            buy_count = len(
-                insider_company[
-                    insider_company["TransactionType"]
-                    .astype(str)
-                    .str.upper()
-                    .str.contains("BUY")
-                ]
-            )
-
-            sell_count = len(
-                insider_company[
-                    insider_company["TransactionType"]
-                    .astype(str)
-                    .str.upper()
-                    .str.contains("SELL")
-                ]
-            )
-
-    comparison_rows.append({
-        "Company": company,
-        "Risk Score": risk_score,
-        "Risk Category": classify_risk(risk_score),
-        "Market Cap": row.get("MarketCap", 0),
-        "Revenue": row.get("Revenue", 0),
-        "Net Income": row.get("NetIncome", 0),
-        "Debt": row.get("Debt", 0),
-        "Revenue Growth": row.get("RevenueGrowth", 0),
-        "Institutional Ownership":
-            row.get("InstitutionalOwnership", 0),
-        "Insider Buys": buy_count,
-        "Insider Sells": sell_count
-    })
-
-compare_table = pd.DataFrame(
-    comparison_rows
-)
-
-# --------------------------------------------------
-# OVERVIEW TABLE
-# --------------------------------------------------
-
-st.subheader("Comparison Table")
-
-st.dataframe(
-    compare_table,
-    use_container_width=True
-)
-
-# --------------------------------------------------
-# KPI METRICS
-# --------------------------------------------------
-
-st.subheader("Company Scorecards")
-
-cols = st.columns(len(selected_companies))
-
-for i, company in enumerate(selected_companies):
-
-    row = compare_table[
-        compare_table["Company"] == company
-    ].iloc[0]
-
-    with cols[i]:
-
-        st.metric(
-            company,
-            f"{row['Risk Score']:.1f}"
-        )
-
-        st.caption(
-            row["Risk Category"]
-        )
-
-# --------------------------------------------------
-# RISK SCORE CHART
-# --------------------------------------------------
-
-st.subheader("Risk Score Comparison")
-
-fig = px.bar(
-    compare_table,
-    x="Company",
-    y="Risk Score",
-    color="Risk Category",
-    title="Company Risk Scores"
-)
-
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
-
-# --------------------------------------------------
-# MARKET CAP COMPARISON
-# --------------------------------------------------
-
-if "Market Cap" in compare_table.columns:
-
-    st.subheader("Market Capitalization")
-
-    fig = px.bar(
-        compare_table,
-        x="Company",
-        y="Market Cap",
-        title="Market Cap Comparison"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-# --------------------------------------------------
-# REVENUE COMPARISON
-# --------------------------------------------------
-
-if "Revenue" in compare_table.columns:
-
-    st.subheader("Revenue Comparison")
-
-    fig = px.bar(
-        compare_table,
-        x="Company",
-        y="Revenue",
-        title="Revenue Comparison"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-# --------------------------------------------------
-# INSTITUTIONAL OWNERSHIP
-# --------------------------------------------------
-
-st.subheader("Institutional Ownership")
-
-fig = px.bar(
-    compare_table,
-    x="Company",
-    y="Institutional Ownership",
-    title="Institutional Ownership %"
-)
-
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
-
-# --------------------------------------------------
-# INSIDER ACTIVITY
-# --------------------------------------------------
-
-st.subheader("Insider Activity")
-
-insider_chart = compare_table[
-    [
-        "Company",
-        "Insider Buys",
-        "Insider Sells"
-    ]
+compare_df = df[
+    df[company_col].astype(str)
+    .isin(selected_companies)
 ]
 
-fig = go.Figure()
+# --------------------------------------------------
+# AGGREGATE DATA
+# --------------------------------------------------
 
-fig.add_trace(
-    go.Bar(
-        name="Buys",
-        x=insider_chart["Company"],
-        y=insider_chart["Insider Buys"]
-    )
+summary = pd.DataFrame()
+
+summary[company_col] = selected_companies
+
+summary = (
+    compare_df
+    .groupby(company_col)
+    .agg({
+        col: "mean"
+        for col in compare_df.select_dtypes(
+            include=np.number
+        ).columns
+    })
+    .reset_index()
 )
 
-fig.add_trace(
-    go.Bar(
-        name="Sells",
-        x=insider_chart["Company"],
-        y=insider_chart["Insider Sells"]
-    )
-)
+# --------------------------------------------------
+# KPI TABLE
+# --------------------------------------------------
 
-fig.update_layout(
-    barmode="group",
-    title="Insider Transactions"
-)
+st.subheader("📊 Comparison Overview")
 
-st.plotly_chart(
-    fig,
+st.dataframe(
+    summary,
     use_container_width=True
 )
+
+# --------------------------------------------------
+# MARKET VALUE COMPARISON
+# --------------------------------------------------
+
+if "market_value" in summary.columns:
+
+    st.subheader("💰 Market Value Comparison")
+
+    fig1 = px.bar(
+        summary,
+        x=company_col,
+        y="market_value",
+        color=company_col,
+        title="Market Value"
+    )
+
+    st.plotly_chart(
+        fig1,
+        use_container_width=True
+    )
+
+# --------------------------------------------------
+# CONVICTION SCORE COMPARISON
+# --------------------------------------------------
+
+if "conviction_score" in summary.columns:
+
+    st.subheader("🎯 Conviction Score Comparison")
+
+    fig2 = px.bar(
+        summary,
+        x=company_col,
+        y="conviction_score",
+        color="conviction_score",
+        title="Average Conviction Score"
+    )
+
+    st.plotly_chart(
+        fig2,
+        use_container_width=True
+    )
+
+# --------------------------------------------------
+# OWNERSHIP COMPARISON
+# --------------------------------------------------
+
+if "ownership_percentage" in summary.columns:
+
+    st.subheader("🏦 Ownership Percentage")
+
+    fig3 = px.bar(
+        summary,
+        x=company_col,
+        y="ownership_percentage",
+        color=company_col,
+        title="Institutional Ownership"
+    )
+
+    st.plotly_chart(
+        fig3,
+        use_container_width=True
+    )
+
+# --------------------------------------------------
+# SHARES CHANGE
+# --------------------------------------------------
+
+if "shares_change" in summary.columns:
+
+    st.subheader("📈 Position Change Analysis")
+
+    fig4 = px.bar(
+        summary,
+        x=company_col,
+        y="shares_change",
+        color=company_col,
+        title="Average Shares Change"
+    )
+
+    st.plotly_chart(
+        fig4,
+        use_container_width=True
+    )
 
 # --------------------------------------------------
 # RADAR CHART
 # --------------------------------------------------
 
-st.subheader("Radar Comparison")
+st.subheader("🕸 Multi-Metric Radar Comparison")
 
-radar_metrics = [
-    "Risk Score",
-    "Revenue Growth",
-    "Institutional Ownership"
-]
+radar_metrics = []
 
-fig = go.Figure()
+for metric in [
+    "market_value",
+    "conviction_score",
+    "shares_owned",
+    "shares_change",
+    "ownership_percentage"
+]:
+    if metric in summary.columns:
+        radar_metrics.append(metric)
 
-for company in selected_companies:
+if len(radar_metrics) >= 3:
 
-    row = compare_table[
-        compare_table["Company"] == company
-    ].iloc[0]
+    radar_df = summary.copy()
 
-    values = [
-        float(row["Risk Score"]),
-        float(row["Revenue Growth"]),
-        float(row["Institutional Ownership"])
-    ]
+    for metric in radar_metrics:
+        max_val = radar_df[metric].max()
 
-    values.append(values[0])
+        if max_val > 0:
+            radar_df[metric] = (
+                radar_df[metric] / max_val
+            ) * 100
 
-    categories = radar_metrics.copy()
-    categories.append(radar_metrics[0])
+    fig_radar = go.Figure()
 
-    fig.add_trace(
-        go.Scatterpolar(
-            r=values,
-            theta=categories,
-            fill="toself",
-            name=company
+    for _, row in radar_df.iterrows():
+
+        fig_radar.add_trace(
+            go.Scatterpolar(
+                r=[row[m] for m in radar_metrics],
+                theta=radar_metrics,
+                fill='toself',
+                name=row[company_col]
+            )
+        )
+
+    fig_radar.update_layout(
+        polar=dict(radialaxis=dict(visible=True)),
+        showlegend=True
+    )
+
+    st.plotly_chart(
+        fig_radar,
+        use_container_width=True
+    )
+
+# --------------------------------------------------
+# CORRELATION HEATMAP
+# --------------------------------------------------
+
+st.subheader("🔥 Correlation Analysis")
+
+numeric_cols = summary.select_dtypes(
+    include=np.number
+)
+
+if len(numeric_cols.columns) > 1:
+
+    corr = numeric_cols.corr()
+
+    heatmap = go.Figure(
+        data=go.Heatmap(
+            z=corr.values,
+            x=corr.columns,
+            y=corr.columns
         )
     )
 
-fig.update_layout(
-    polar=dict(
-        radialaxis=dict(
-            visible=True
+    heatmap.update_layout(
+        title="Metric Correlation Matrix"
+    )
+
+    st.plotly_chart(
+        heatmap,
+        use_container_width=True
+    )
+
+# --------------------------------------------------
+# RANKING ENGINE
+# --------------------------------------------------
+
+st.subheader("🏆 Company Ranking")
+
+ranking_metrics = [
+    col
+    for col in summary.columns
+    if col != company_col
+]
+
+rank_df = summary.copy()
+
+rank_df["overall_score"] = 0
+
+for metric in ranking_metrics:
+
+    rank_df["overall_score"] += (
+        rank_df[metric]
+        .rank(
+            ascending=False,
+            method="average"
         )
-    ),
-    showlegend=True
+    )
+
+rank_df = rank_df.sort_values(
+    "overall_score"
 )
 
-st.plotly_chart(
-    fig,
-    use_container_width=True
-)
-
-# --------------------------------------------------
-# COMPANY RANKING
-# --------------------------------------------------
-
-st.subheader("Overall Ranking")
-
-ranking_df = compare_table.copy()
-
-ranking_df["Composite Score"] = (
-    ranking_df["Revenue Growth"].fillna(0)
-    +
-    ranking_df["Institutional Ownership"].fillna(0)
-    -
-    ranking_df["Risk Score"].fillna(0)
-)
-
-ranking_df = ranking_df.sort_values(
-    by="Composite Score",
-    ascending=False
-)
-
-ranking_df.insert(
-    0,
-    "Rank",
-    range(1, len(ranking_df) + 1)
+rank_df["Rank"] = range(
+    1,
+    len(rank_df) + 1
 )
 
 st.dataframe(
-    ranking_df[
-        [
-            "Rank",
-            "Company",
-            "Composite Score",
-            "Risk Score",
-            "Revenue Growth",
-            "Institutional Ownership"
-        ]
+    rank_df[
+        ["Rank", company_col, "overall_score"]
     ],
     use_container_width=True
 )
 
 # --------------------------------------------------
-# BEST COMPANY
+# AI INSIGHTS
 # --------------------------------------------------
 
-best_company = ranking_df.iloc[0]
+st.subheader("🤖 AI Comparison Insights")
 
-st.success(
-    f"""
-🏆 Top Ranked Company: {best_company['Company']}
+top_company = rank_df.iloc[0][company_col]
 
-Composite Score: {best_company['Composite Score']:.2f}
+st.info(f"""
+Top ranked company: {top_company}
 
-Risk Score: {best_company['Risk Score']:.2f}
+Comparison performed using:
 
-Institutional Ownership:
-{best_company['Institutional Ownership']:.2f}%
-"""
-)
+• Market Value
 
-# --------------------------------------------------
-# AI COMPARISON SUMMARY
-# --------------------------------------------------
+• Conviction Score
 
-st.subheader("🤖 AI Comparison Summary")
+• Ownership Percentage
 
-summary = f"""
-### Comparison Results
+• Shares Owned
 
-A total of {len(selected_companies)} companies were analyzed.
+• Position Changes
 
-Top Performer:
-**{best_company['Company']}**
+Companies with higher conviction scores,
+larger ownership concentrations, and
+consistent institutional accumulation
+typically demonstrate stronger institutional
+confidence.
 
-Reasons:
-
-- Strong composite score
-- Favorable institutional ownership
-- Better growth profile
-- Lower relative risk
-
-Factors Included:
-
-- Risk Score
-- Revenue Growth
-- Institutional Ownership
-- Insider Activity
-- Market Performance Indicators
-
-Recommendation:
-
-Prioritize further due diligence on the
-top-ranked companies before making
-investment decisions.
-"""
-
-st.markdown(summary)
+Use these insights alongside qualitative
+research before making investment decisions.
+""")
 
 # --------------------------------------------------
-# DOWNLOAD REPORT
+# RAW DATA
 # --------------------------------------------------
 
-st.markdown("---")
+with st.expander("📂 View Raw Records"):
+    st.dataframe(
+        compare_df,
+        use_container_width=True,
+        height=400
+    )
 
-csv = ranking_df.to_csv(
+# --------------------------------------------------
+# EXPORT REPORT
+# --------------------------------------------------
+
+st.subheader("📥 Export Comparison Report")
+
+csv = rank_df.to_csv(
     index=False
 ).encode("utf-8")
 
 st.download_button(
-    label="⬇ Download Comparison Report",
-    data=csv,
-    file_name="company_comparison_report.csv",
-    mime="text/csv"
+    "Download Comparison Report",
+    csv,
+    "company_comparison_report.csv",
+    "text/csv"
 )
-```

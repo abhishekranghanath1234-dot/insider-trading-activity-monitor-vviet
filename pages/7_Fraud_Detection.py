@@ -1,19 +1,12 @@
-```python
-# pages/7_Fraud_Detection.py
+ # pages/Fraud_Detection.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
 from sklearn.ensemble import IsolationForest
-from sklearn.preprocessing import StandardScaler
 
-from utils.data_loader import (
-    load_master_data,
-    load_insider_data,
-    load_holdings_data
-)
+from utils.data_loader import load_master_data
 
 st.set_page_config(
     page_title="Fraud Detection",
@@ -21,200 +14,108 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🚨 AI Fraud Detection Engine")
-st.markdown(
-    "Detect suspicious insider trading activity, "
-    "ownership anomalies, and abnormal corporate behavior."
-)
+st.title("🚨 Fraud Detection & Anomaly Analytics")
 
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
 
-@st.cache_data
-def load_data():
-    master = load_master_data()
-    insider = load_insider_data()
-    holdings = load_holdings_data()
-    return master, insider, holdings
+df = load_master_data()
 
-
-master_df, insider_df, holdings_df = load_data()
+st.sidebar.header("Filters")
 
 # --------------------------------------------------
-# VALIDATION
+# SELECT NUMERIC FEATURES
 # --------------------------------------------------
 
-if insider_df.empty:
-    st.error("Insider transaction dataset not available.")
-    st.stop()
-
-# --------------------------------------------------
-# SIDEBAR
-# --------------------------------------------------
-
-st.sidebar.header("Detection Settings")
-
-contamination = st.sidebar.slider(
-    "Anomaly Sensitivity",
-    min_value=0.01,
-    max_value=0.25,
-    value=0.05,
-    step=0.01
-)
-
-selected_company = "All Companies"
-
-if "Company" in insider_df.columns:
-    company_options = ["All Companies"] + sorted(
-        insider_df["Company"].dropna().unique().tolist()
-    )
-
-    selected_company = st.sidebar.selectbox(
-        "Company Filter",
-        company_options
-    )
-
-# --------------------------------------------------
-# FILTER DATA
-# --------------------------------------------------
-
-analysis_df = insider_df.copy()
-
-if (
-    selected_company != "All Companies"
-    and "Company" in analysis_df.columns
-):
-    analysis_df = analysis_df[
-        analysis_df["Company"] == selected_company
-    ]
-
-if analysis_df.empty:
-    st.warning("No records found.")
-    st.stop()
-
-# --------------------------------------------------
-# FEATURE ENGINEERING
-# --------------------------------------------------
-
-working_df = analysis_df.copy()
-
-numeric_features = []
-
-candidate_columns = [
-    "Shares",
-    "TransactionValue",
-    "Price",
-    "OwnershipPercent",
-    "MarketCap"
+possible_features = [
+    "market_value",
+    "conviction_score",
+    "shares_owned",
+    "shares_change",
+    "ownership_percentage"
 ]
 
-for col in candidate_columns:
-    if col in working_df.columns:
-        working_df[col] = pd.to_numeric(
-            working_df[col],
-            errors="coerce"
-        )
-        numeric_features.append(col)
+features = [c for c in possible_features if c in df.columns]
 
-if len(numeric_features) == 0:
+if len(features) < 2:
     st.error(
-        "No numeric columns available for anomaly detection."
+        "Not enough numeric columns found for anomaly detection."
     )
     st.stop()
 
-working_df = working_df.dropna(
-    subset=numeric_features
+selected_features = st.sidebar.multiselect(
+    "Select Features",
+    features,
+    default=features[:3]
 )
 
-if len(working_df) < 10:
-    st.warning(
-        "Not enough records for reliable anomaly detection."
-    )
-    st.stop()
+# --------------------------------------------------
+# CLEAN DATA
+# --------------------------------------------------
+
+anomaly_df = df[selected_features].copy()
+
+anomaly_df = anomaly_df.replace(
+    [np.inf, -np.inf],
+    np.nan
+)
+
+anomaly_df = anomaly_df.fillna(
+    anomaly_df.median(numeric_only=True)
+)
 
 # --------------------------------------------------
 # MODEL
 # --------------------------------------------------
 
-scaler = StandardScaler()
-
-X = scaler.fit_transform(
-    working_df[numeric_features]
-)
-
 model = IsolationForest(
-    contamination=contamination,
-    random_state=42,
-    n_estimators=200
+    contamination=0.03,
+    random_state=42
 )
 
-model.fit(X)
-
-predictions = model.predict(X)
-
-scores = model.decision_function(X)
-
-working_df["AnomalyFlag"] = predictions
-working_df["AnomalyScore"] = scores
-
-working_df["RiskLabel"] = np.where(
-    working_df["AnomalyFlag"] == -1,
-    "Suspicious",
-    "Normal"
+predictions = model.fit_predict(
+    anomaly_df
 )
+
+scores = model.decision_function(
+    anomaly_df
+)
+
+df["anomaly"] = predictions
+df["anomaly_score"] = scores
+
+fraud_df = df[
+    df["anomaly"] == -1
+]
 
 # --------------------------------------------------
-# METRICS
+# KPI SECTION
 # --------------------------------------------------
 
-total_records = len(working_df)
+st.subheader("Detection Summary")
 
-suspicious_records = len(
-    working_df[
-        working_df["RiskLabel"] == "Suspicious"
-    ]
-)
-
-fraud_rate = (
-    suspicious_records / total_records
-) * 100
-
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 col1.metric(
-    "Transactions Analysed",
-    f"{total_records:,}"
+    "Total Records",
+    f"{len(df):,}"
 )
 
 col2.metric(
-    "Suspicious Records",
-    f"{suspicious_records:,}"
+    "Anomalies Found",
+    f"{len(fraud_df):,}"
 )
 
 col3.metric(
-    "Fraud Risk %",
-    f"{fraud_rate:.2f}%"
+    "Fraud Rate",
+    f"{(len(fraud_df)/len(df))*100:.2f}%"
 )
 
-st.markdown("---")
-
-# --------------------------------------------------
-# FRAUD STATUS
-# --------------------------------------------------
-
-if fraud_rate < 3:
-    st.success(
-        "🟢 Low Fraud Risk Environment"
-    )
-elif fraud_rate < 10:
-    st.warning(
-        "🟠 Moderate Fraud Risk Environment"
-    )
-else:
-    st.error(
-        "🔴 High Fraud Risk Environment"
-    )
+col4.metric(
+    "Features Used",
+    len(selected_features)
+)
 
 # --------------------------------------------------
 # ANOMALY DISTRIBUTION
@@ -222,12 +123,19 @@ else:
 
 st.subheader("Anomaly Distribution")
 
-fig = px.histogram(
-    working_df,
-    x="AnomalyScore",
-    color="RiskLabel",
-    nbins=40,
-    title="Anomaly Score Distribution"
+chart_df = pd.DataFrame({
+    "Category": ["Normal", "Anomaly"],
+    "Count": [
+        len(df[df["anomaly"] == 1]),
+        len(df[df["anomaly"] == -1])
+    ]
+})
+
+fig = px.pie(
+    chart_df,
+    names="Category",
+    values="Count",
+    title="Fraud vs Normal Records"
 )
 
 st.plotly_chart(
@@ -236,230 +144,153 @@ st.plotly_chart(
 )
 
 # --------------------------------------------------
+# ANOMALY SCORE HISTOGRAM
+# --------------------------------------------------
+
+st.subheader("Anomaly Score Distribution")
+
+fig2 = px.histogram(
+    df,
+    x="anomaly_score",
+    nbins=50,
+    title="Isolation Forest Score Distribution"
+)
+
+st.plotly_chart(
+    fig2,
+    use_container_width=True
+)
+
+# --------------------------------------------------
 # SCATTER ANALYSIS
 # --------------------------------------------------
 
-if len(numeric_features) >= 2:
+if len(selected_features) >= 2:
 
-    st.subheader(
-        "Suspicious Transaction Mapping"
-    )
+    st.subheader("Fraud Cluster Visualization")
 
-    fig = px.scatter(
-        working_df,
-        x=numeric_features[0],
-        y=numeric_features[1],
-        color="RiskLabel",
-        hover_data=working_df.columns,
-        title="Detected Outliers"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-# --------------------------------------------------
-# TOP SUSPICIOUS RECORDS
-# --------------------------------------------------
-
-st.subheader(
-    "Top Suspicious Transactions"
-)
-
-fraud_df = working_df[
-    working_df["RiskLabel"] == "Suspicious"
-].copy()
-
-fraud_df = fraud_df.sort_values(
-    by="AnomalyScore"
-)
-
-if not fraud_df.empty:
-
-    st.dataframe(
-        fraud_df.head(50),
-        use_container_width=True
-    )
-
-else:
-    st.info(
-        "No suspicious records detected."
-    )
-
-# --------------------------------------------------
-# COMPANY RISK TABLE
-# --------------------------------------------------
-
-if "Company" in working_df.columns:
-
-    st.subheader(
-        "Company Fraud Risk Ranking"
-    )
-
-    company_risk = (
-        working_df
-        .groupby("Company")
-        .agg(
-            TotalTransactions=("Company", "count"),
-            SuspiciousCount=(
-                "RiskLabel",
-                lambda x: (
-                    x == "Suspicious"
-                ).sum()
-            )
-        )
-        .reset_index()
-    )
-
-    company_risk["RiskRate"] = (
-        company_risk["SuspiciousCount"]
-        /
-        company_risk["TotalTransactions"]
-    ) * 100
-
-    company_risk = company_risk.sort_values(
-        by="RiskRate",
-        ascending=False
-    )
-
-    st.dataframe(
-        company_risk,
-        use_container_width=True
-    )
-
-    fig = px.bar(
-        company_risk.head(20),
-        x="Company",
-        y="RiskRate",
-        title="Top Risk Companies"
+    fig3 = px.scatter(
+        df,
+        x=selected_features[0],
+        y=selected_features[1],
+        color=df["anomaly"].astype(str),
+        hover_data=["anomaly_score"],
+        title="Anomaly Clusters"
     )
 
     st.plotly_chart(
-        fig,
+        fig3,
         use_container_width=True
     )
 
 # --------------------------------------------------
-# EXECUTIVE ANALYSIS
+# HIGH-RISK RECORDS
 # --------------------------------------------------
 
-if "InsiderName" in working_df.columns:
+st.subheader("High Risk Records")
 
-    st.subheader(
-        "High-Risk Insider Ranking"
-    )
+display_cols = []
 
-    insider_risk = (
-        working_df
-        .groupby("InsiderName")
-        .agg(
-            Transactions=("InsiderName", "count"),
-            Suspicious=(
-                "RiskLabel",
-                lambda x: (
-                    x == "Suspicious"
-                ).sum()
-            )
-        )
-        .reset_index()
-    )
+preferred_cols = [
+    "company_name",
+    "issuer_name",
+    "market_value",
+    "conviction_score",
+    "anomaly_score"
+]
 
-    insider_risk["RiskRate"] = (
-        insider_risk["Suspicious"]
-        /
-        insider_risk["Transactions"]
-    ) * 100
+for col in preferred_cols:
+    if col in fraud_df.columns:
+        display_cols.append(col)
 
-    insider_risk = insider_risk.sort_values(
-        by="RiskRate",
-        ascending=False
-    )
-
+if len(display_cols) > 0:
     st.dataframe(
-        insider_risk.head(25),
+        fraud_df[display_cols]
+        .sort_values(
+            "anomaly_score",
+            ascending=True
+        ),
+        use_container_width=True
+    )
+else:
+    st.dataframe(
+        fraud_df.head(100),
         use_container_width=True
     )
 
 # --------------------------------------------------
-# AI FRAUD SUMMARY
+# TOP SUSPICIOUS COMPANIES
 # --------------------------------------------------
 
-st.subheader(
-    "🤖 AI Fraud Assessment"
+if "company_name" in fraud_df.columns:
+
+    st.subheader("Most Suspicious Companies")
+
+    suspicious = (
+        fraud_df.groupby("company_name")
+        .size()
+        .reset_index(name="anomaly_count")
+        .sort_values(
+            "anomaly_count",
+            ascending=False
+        )
+        .head(20)
+    )
+
+    fig4 = px.bar(
+        suspicious,
+        x="company_name",
+        y="anomaly_count",
+        title="Top Suspicious Companies"
+    )
+
+    st.plotly_chart(
+        fig4,
+        use_container_width=True
+    )
+
+# --------------------------------------------------
+# AI INSIGHTS
+# --------------------------------------------------
+
+st.subheader("🤖 AI Insights")
+
+fraud_percent = (
+    len(fraud_df) / len(df)
+) * 100
+
+st.info(
+    f"""
+    • Total records analyzed: {len(df):,}
+
+    • Potential anomalies detected: {len(fraud_df):,}
+
+    • Estimated anomaly rate: {fraud_percent:.2f}%
+
+    • Isolation Forest identified records that differ
+      significantly from normal institutional behavior.
+
+    • Unusual conviction scores combined with large
+      position changes may indicate abnormal activity.
+
+    • Review high-risk entities before making
+      investment decisions.
+    """
 )
-
-if fraud_rate < 3:
-
-    summary = f"""
-### Overall Assessment: LOW RISK
-
-The anomaly detection engine analyzed
-{total_records:,} insider transactions.
-
-Only {suspicious_records:,} transactions
-were classified as anomalous.
-
-Current trading activity appears normal.
-
-Recommended Actions:
-
-- Continue monitoring
-- Weekly risk review
-- Track large insider purchases
-"""
-
-elif fraud_rate < 10:
-
-    summary = f"""
-### Overall Assessment: MODERATE RISK
-
-The engine detected
-{suspicious_records:,} unusual transactions.
-
-Several trading patterns differ from
-historical behavior.
-
-Recommended Actions:
-
-- Investigate large transactions
-- Monitor executive activity
-- Review ownership changes
-"""
-
-else:
-
-    summary = f"""
-### Overall Assessment: HIGH RISK
-
-The AI engine detected a significant
-number of suspicious transactions.
-
-Potential warning signs:
-
-- Abnormal trading volumes
-- Unusual insider behavior
-- Ownership concentration shifts
-
-Immediate review recommended.
-"""
-
-st.markdown(summary)
 
 # --------------------------------------------------
 # DOWNLOAD RESULTS
 # --------------------------------------------------
 
-st.markdown("---")
+st.subheader("Export Results")
 
-csv = working_df.to_csv(
+csv = fraud_df.to_csv(
     index=False
 ).encode("utf-8")
 
 st.download_button(
-    label="⬇ Download Fraud Detection Report",
-    data=csv,
-    file_name="fraud_detection_report.csv",
-    mime="text/csv"
+    "📥 Download Fraud Report",
+    csv,
+    "fraud_detection_report.csv",
+    "text/csv"
 )
-```

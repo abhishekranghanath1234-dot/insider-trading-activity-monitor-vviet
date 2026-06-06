@@ -1,21 +1,16 @@
+ # pages/Company_Analysis.py
+
 import streamlit as st
 import pandas as pd
+import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 
-from utils.data_loader import (
-    load_master_data,
-    load_insider_data,
-    load_holdings_data
-)
+from utils.data_loader import load_master_data
 
-from utils.risk_scoring import (
-    calculate_risk_score,
-    classify_risk
-)
-
-# --------------------------------------------------
+# ---------------------------------------------------
 # PAGE CONFIG
-# --------------------------------------------------
+# ---------------------------------------------------
 
 st.set_page_config(
     page_title="Company Analysis",
@@ -23,357 +18,309 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🏢 Company Analysis")
-st.markdown("Comprehensive company intelligence dashboard")
+st.title("🏢 Company Analysis Dashboard")
 
-# --------------------------------------------------
+# ---------------------------------------------------
 # LOAD DATA
-# --------------------------------------------------
+# ---------------------------------------------------
 
 @st.cache_data
-def load_data():
-    master = load_master_data()
-    insider = load_insider_data()
-    holdings = load_holdings_data()
-    return master, insider, holdings
+def get_data():
+    return load_master_data()
 
+df = get_data()
 
-master_df, insider_df, holdings_df = load_data()
+# ---------------------------------------------------
+# COMPANY SELECTION
+# ---------------------------------------------------
 
-# --------------------------------------------------
-# VALIDATION
-# --------------------------------------------------
+company_col = None
 
-if master_df.empty:
-    st.error("MASTER_DATA_ENRICHED.csv not found or empty")
+possible_company_cols = [
+    "company_name",
+    "issuer_name",
+    "company",
+    "issuer"
+]
+
+for col in possible_company_cols:
+    if col in df.columns:
+        company_col = col
+        break
+
+if company_col is None:
+    st.error("Company column not found in dataset.")
     st.stop()
 
-if "Company" not in master_df.columns:
-    st.error("Column 'Company' not found in MASTER_DATA_ENRICHED.csv")
-    st.stop()
-
-# --------------------------------------------------
-# SIDEBAR FILTERS
-# --------------------------------------------------
-
-st.sidebar.header("Filters")
-
-company_list = sorted(master_df["Company"].dropna().unique())
+companies = sorted(
+    df[company_col]
+    .dropna()
+    .astype(str)
+    .unique()
+)
 
 selected_company = st.sidebar.selectbox(
     "Select Company",
-    company_list
+    companies
 )
 
-# --------------------------------------------------
-# COMPANY DATA
-# --------------------------------------------------
-
-company_data = master_df[
-    master_df["Company"] == selected_company
+company_df = df[
+    df[company_col].astype(str) == selected_company
 ]
 
-if company_data.empty:
-    st.warning("No data available.")
-    st.stop()
+# ---------------------------------------------------
+# KPIs
+# ---------------------------------------------------
 
-company = company_data.iloc[0]
+st.subheader(f"📈 {selected_company} Overview")
 
-# --------------------------------------------------
-# HEADER
-# --------------------------------------------------
+col1, col2, col3, col4 = st.columns(4)
 
-st.markdown("---")
+total_records = len(company_df)
 
-col1, col2 = st.columns([3, 1])
+market_value = (
+    company_df["market_value"].sum()
+    if "market_value" in company_df.columns
+    else 0
+)
 
-with col1:
-    st.subheader(selected_company)
+avg_conviction = (
+    company_df["conviction_score"].mean()
+    if "conviction_score" in company_df.columns
+    else 0
+)
 
-    if "Sector" in company_data.columns:
-        st.write(f"**Sector:** {company['Sector']}")
+institution_count = (
+    company_df["institution_name"].nunique()
+    if "institution_name" in company_df.columns
+    else 0
+)
 
-    if "Industry" in company_data.columns:
-        st.write(f"**Industry:** {company['Industry']}")
+col1.metric(
+    "Records",
+    f"{total_records:,}"
+)
 
-with col2:
-    st.metric(
-        "Market Cap",
-        f"${company.get('MarketCap',0):,.0f}"
-        if pd.notna(company.get("MarketCap", 0))
-        else "N/A"
+col2.metric(
+    "Market Value",
+    f"${market_value:,.0f}"
+)
+
+col3.metric(
+    "Avg Conviction",
+    f"{avg_conviction:.2f}"
+)
+
+col4.metric(
+    "Institutions",
+    f"{institution_count:,}"
+)
+
+# ---------------------------------------------------
+# MARKET VALUE ANALYSIS
+# ---------------------------------------------------
+
+if "market_value" in company_df.columns:
+
+    st.subheader("💰 Market Value Distribution")
+
+    fig = px.histogram(
+        company_df,
+        x="market_value",
+        nbins=30,
+        title="Market Value Distribution"
     )
 
-st.markdown("---")
-
-# --------------------------------------------------
-# RISK SCORE
-# --------------------------------------------------
-
-try:
-    risk_score = calculate_risk_score(company)
-except:
-    risk_score = 50
-
-risk_level = classify_risk(risk_score)
-
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Risk Score", f"{risk_score:.1f}")
-c2.metric("Risk Category", risk_level)
-
-if "RevenueGrowth" in company_data.columns:
-    c3.metric(
-        "Revenue Growth",
-        f"{company['RevenueGrowth']}%"
+    st.plotly_chart(
+        fig,
+        use_container_width=True
     )
 
-st.markdown("---")
+# ---------------------------------------------------
+# CONVICTION ANALYSIS
+# ---------------------------------------------------
 
-# --------------------------------------------------
-# COMPANY FUNDAMENTALS
-# --------------------------------------------------
+if "conviction_score" in company_df.columns:
 
-st.subheader("📊 Fundamental Metrics")
+    st.subheader("🎯 Conviction Score Analysis")
 
-metric_cols = st.columns(4)
+    fig2 = px.box(
+        company_df,
+        y="conviction_score",
+        title="Conviction Score Spread"
+    )
 
-metrics = [
-    ("Revenue", "Revenue"),
-    ("Net Income", "NetIncome"),
-    ("Debt", "Debt"),
-    ("Institutional Ownership", "InstitutionalOwnership")
-]
+    st.plotly_chart(
+        fig2,
+        use_container_width=True
+    )
 
-for idx, (label, column) in enumerate(metrics):
-    if column in company_data.columns:
-        metric_cols[idx].metric(
-            label,
-            f"{company[column]:,.2f}"
-            if pd.notna(company[column])
-            else "N/A"
-        )
-
-st.markdown("---")
-
-# --------------------------------------------------
-# INSIDER TRANSACTIONS
-# --------------------------------------------------
-
-st.subheader("👤 Insider Activity")
-
-if not insider_df.empty:
-
-    insider_company = insider_df[
-        insider_df["Company"] == selected_company
-    ]
-
-    if not insider_company.empty:
-
-        buy_count = len(
-            insider_company[
-                insider_company["TransactionType"]
-                .str.upper()
-                .str.contains("BUY")
-            ]
-        )
-
-        sell_count = len(
-            insider_company[
-                insider_company["TransactionType"]
-                .str.upper()
-                .str.contains("SELL")
-            ]
-        )
-
-        col1, col2 = st.columns(2)
-
-        col1.metric("Buy Transactions", buy_count)
-        col2.metric("Sell Transactions", sell_count)
-
-        if "TransactionDate" in insider_company.columns:
-
-            insider_company["TransactionDate"] = pd.to_datetime(
-                insider_company["TransactionDate"],
-                errors="coerce"
-            )
-
-            trend = (
-                insider_company
-                .groupby("TransactionDate")
-                .size()
-                .reset_index(name="Count")
-            )
-
-            fig = px.line(
-                trend,
-                x="TransactionDate",
-                y="Count",
-                title="Insider Activity Trend"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-        st.dataframe(
-            insider_company.sort_values(
-                by=insider_company.columns[0],
-                ascending=False
-            ),
-            use_container_width=True
-        )
-
-    else:
-        st.info("No insider activity found.")
-
-else:
-    st.info("Insider transaction dataset unavailable.")
-
-st.markdown("---")
-
-# --------------------------------------------------
+# ---------------------------------------------------
 # INSTITUTIONAL HOLDINGS
-# --------------------------------------------------
+# ---------------------------------------------------
 
-st.subheader("🏦 Institutional Holdings")
+if (
+    "institution_name" in company_df.columns
+    and "market_value" in company_df.columns
+):
 
-if not holdings_df.empty:
+    st.subheader("🏦 Top Institutional Holders")
 
-    holdings_company = holdings_df[
-        holdings_df["Company"] == selected_company
-    ]
-
-    if not holdings_company.empty:
-
-        st.dataframe(
-            holdings_company,
-            use_container_width=True
+    holders = (
+        company_df
+        .groupby("institution_name")
+        ["market_value"]
+        .sum()
+        .reset_index()
+        .sort_values(
+            "market_value",
+            ascending=False
         )
+        .head(15)
+    )
 
-        if (
-            "Institution" in holdings_company.columns
-            and "OwnershipPercent" in holdings_company.columns
-        ):
+    fig3 = px.bar(
+        holders,
+        x="institution_name",
+        y="market_value",
+        title="Largest Holders"
+    )
 
-            fig = px.bar(
-                holdings_company,
-                x="Institution",
-                y="OwnershipPercent",
-                title="Institutional Ownership Distribution"
-            )
+    st.plotly_chart(
+        fig3,
+        use_container_width=True
+    )
 
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
+# ---------------------------------------------------
+# POSITION CHANGES
+# ---------------------------------------------------
 
-    else:
-        st.info("No institutional holdings data found.")
+if "shares_change" in company_df.columns:
 
-else:
-    st.info("Holdings dataset unavailable.")
+    st.subheader("📊 Position Changes")
 
-st.markdown("---")
+    fig4 = px.histogram(
+        company_df,
+        x="shares_change",
+        nbins=40,
+        title="Shares Change Distribution"
+    )
 
-# --------------------------------------------------
-# COMPANY HEALTH
-# --------------------------------------------------
+    st.plotly_chart(
+        fig4,
+        use_container_width=True
+    )
 
-st.subheader("🩺 Company Health Assessment")
+# ---------------------------------------------------
+# CORRELATION HEATMAP
+# ---------------------------------------------------
 
-health_score = 100
+st.subheader("🔥 Numerical Correlations")
 
-if "Debt" in company_data.columns:
-    if company["Debt"] > 1000000000:
-        health_score -= 20
+numeric_df = company_df.select_dtypes(
+    include=np.number
+)
 
-if "RevenueGrowth" in company_data.columns:
-    if company["RevenueGrowth"] < 0:
-        health_score -= 25
+if len(numeric_df.columns) > 1:
 
-if risk_score > 70:
-    health_score -= 30
+    corr = numeric_df.corr()
 
-health_score = max(0, health_score)
+    heatmap = go.Figure(
+        data=go.Heatmap(
+            z=corr.values,
+            x=corr.columns,
+            y=corr.columns
+        )
+    )
 
-if health_score >= 80:
-    health_status = "Excellent"
-elif health_score >= 60:
-    health_status = "Good"
-elif health_score >= 40:
-    health_status = "Average"
-else:
-    health_status = "Weak"
+    heatmap.update_layout(
+        title="Correlation Matrix"
+    )
 
-col1, col2 = st.columns(2)
+    st.plotly_chart(
+        heatmap,
+        use_container_width=True
+    )
 
-col1.metric("Health Score", health_score)
-col2.metric("Assessment", health_status)
+# ---------------------------------------------------
+# DATA QUALITY SUMMARY
+# ---------------------------------------------------
 
-st.markdown("---")
+st.subheader("📋 Data Quality")
 
-# --------------------------------------------------
-# AI SUMMARY
-# --------------------------------------------------
-
-st.subheader("🤖 AI Company Summary")
-
-summary = f"""
-### {selected_company}
-
-**Risk Assessment:** {risk_level}
-
-**Risk Score:** {risk_score:.1f}
-
-**Health Status:** {health_status}
-
-The company operates in the
-{company.get('Sector', 'Unknown')} sector.
-
-Current institutional ownership and insider
-activity patterns suggest monitoring of future
-capital flows and executive trading behavior.
-
-Recommended focus areas:
-
-- Insider transaction trends
-- Institutional accumulation/distribution
-- Revenue growth sustainability
-- Debt management
-- Risk score changes
-"""
-
-st.markdown(summary)
-
-# --------------------------------------------------
-# DOWNLOAD REPORT
-# --------------------------------------------------
-
-st.markdown("---")
-
-report_df = pd.DataFrame({
-    "Metric": [
-        "Company",
-        "Risk Score",
-        "Risk Category",
-        "Health Score",
-        "Health Status"
-    ],
-    "Value": [
-        selected_company,
-        risk_score,
-        risk_level,
-        health_score,
-        health_status
-    ]
+quality = pd.DataFrame({
+    "Column": company_df.columns,
+    "Missing Values":
+    company_df.isnull().sum().values,
+    "Data Type":
+    company_df.dtypes.values.astype(str)
 })
 
-csv = report_df.to_csv(index=False).encode("utf-8")
+st.dataframe(
+    quality,
+    use_container_width=True
+)
+
+# ---------------------------------------------------
+# RAW DATA
+# ---------------------------------------------------
+
+st.subheader("🗂 Company Records")
+
+st.dataframe(
+    company_df,
+    use_container_width=True,
+    height=400
+)
+
+# ---------------------------------------------------
+# AI INSIGHTS
+# ---------------------------------------------------
+
+st.subheader("🤖 AI Insights")
+
+insights = []
+
+if market_value > 0:
+    insights.append(
+        f"Total tracked market value is ${market_value:,.0f}."
+    )
+
+if avg_conviction > 0:
+    insights.append(
+        f"Average conviction score is {avg_conviction:.2f}."
+    )
+
+if institution_count > 0:
+    insights.append(
+        f"{institution_count} institutions currently hold positions."
+    )
+
+if "shares_change" in company_df.columns:
+
+    avg_change = company_df[
+        "shares_change"
+    ].mean()
+
+    insights.append(
+        f"Average share change is {avg_change:,.0f}."
+    )
+
+for item in insights:
+    st.info(item)
+
+# ---------------------------------------------------
+# EXPORT SECTION
+# ---------------------------------------------------
+
+st.subheader("📥 Export Company Report")
+
+csv = company_df.to_csv(
+    index=False
+).encode("utf-8")
 
 st.download_button(
-    label="⬇ Download Company Report",
+    label="Download CSV Report",
     data=csv,
     file_name=f"{selected_company}_analysis.csv",
     mime="text/csv"

@@ -1,226 +1,442 @@
-```python id="comparison_engine_utils_001"
-# utils/comparison_engine.py
+ # pages/comparison_engine.py
 
-import numpy as np
+import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 
-from utils.risk_scoring import calculate_risk_score, classify_risk
+from utils.data_loader import load_master_data
 
+# =====================================================
+# PAGE CONFIG
+# =====================================================
 
-# --------------------------------------------------
-# CORE COMPARISON ENGINE
-# --------------------------------------------------
+st.set_page_config(
+    page_title="Comparison Engine",
+    page_icon="⚖️",
+    layout="wide"
+)
 
-def compare_companies(master_df: pd.DataFrame, companies: list):
-    """
-    Build a structured comparison dataset for selected companies.
-    """
+st.title("⚖️ AI Comparison Engine")
+st.caption(
+    "Advanced Multi-Company Institutional Intelligence Comparison"
+)
 
-    if master_df.empty or not companies:
-        return pd.DataFrame()
+# =====================================================
+# LOAD DATA
+# =====================================================
 
-    filtered = master_df[
-        master_df["Company"].isin(companies)
-    ].copy()
+@st.cache_data
+def get_data():
+    return load_master_data()
 
-    results = []
+df = get_data()
 
-    for _, row in filtered.iterrows():
+# =====================================================
+# DETECT COMPANY COLUMN
+# =====================================================
 
-        company = row.get("Company")
+company_col = None
 
-        # Risk score
-        try:
-            risk_score = calculate_risk_score(row)
-        except:
-            risk_score = 50
+for col in [
+    "company_name",
+    "issuer_name",
+    "company",
+    "issuer"
+]:
+    if col in df.columns:
+        company_col = col
+        break
 
-        risk_category = classify_risk(risk_score)
+if company_col is None:
+    st.error("Company column not found.")
+    st.stop()
 
-        results.append({
-            "Company": company,
-            "Risk Score": risk_score,
-            "Risk Category": risk_category,
-            "Market Cap": row.get("MarketCap", 0),
-            "Revenue": row.get("Revenue", 0),
-            "Net Income": row.get("NetIncome", 0),
-            "Debt": row.get("Debt", 0),
-            "Revenue Growth": row.get("RevenueGrowth", 0),
-            "Institutional Ownership": row.get("InstitutionalOwnership", 0)
-        })
+# =====================================================
+# COMPANY SELECTION
+# =====================================================
 
-    return pd.DataFrame(results)
+companies = sorted(
+    df[company_col]
+    .dropna()
+    .astype(str)
+    .unique()
+)
 
+selected_companies = st.multiselect(
+    "Select Companies",
+    companies,
+    default=companies[:min(5, len(companies))]
+)
 
-# --------------------------------------------------
-# COMPANY RANKING ENGINE
-# --------------------------------------------------
-
-def rank_companies(df: pd.DataFrame):
-    """
-    Rank companies using composite scoring model.
-    """
-
-    if df.empty:
-        return df
-
-    ranking_df = df.copy()
-
-    ranking_df["Composite Score"] = (
-        ranking_df["Revenue Growth"].fillna(0)
-        + ranking_df["Institutional Ownership"].fillna(0)
-        - ranking_df["Risk Score"].fillna(0)
+if len(selected_companies) < 2:
+    st.warning(
+        "Please select at least 2 companies."
     )
+    st.stop()
 
-    ranking_df = ranking_df.sort_values(
-        by="Composite Score",
-        ascending=False
+compare_df = df[
+    df[company_col]
+    .astype(str)
+    .isin(selected_companies)
+]
+
+# =====================================================
+# NUMERIC COLUMNS
+# =====================================================
+
+numeric_cols = (
+    compare_df
+    .select_dtypes(include=np.number)
+    .columns
+    .tolist()
+)
+
+if len(numeric_cols) == 0:
+    st.error("No numeric columns found.")
+    st.stop()
+
+# =====================================================
+# AGGREGATE DATA
+# =====================================================
+
+summary = (
+    compare_df
+    .groupby(company_col)[numeric_cols]
+    .mean()
+    .reset_index()
+)
+
+# =====================================================
+# KPI SECTION
+# =====================================================
+
+st.subheader("📊 Comparison Summary")
+
+col1, col2, col3, col4 = st.columns(4)
+
+col1.metric(
+    "Companies",
+    len(selected_companies)
+)
+
+col2.metric(
+    "Records Compared",
+    len(compare_df)
+)
+
+col3.metric(
+    "Metrics Used",
+    len(numeric_cols)
+)
+
+col4.metric(
+    "Average Metrics",
+    round(
+        summary[numeric_cols]
+        .mean()
+        .mean(),
+        2
     )
+)
 
-    ranking_df.insert(
-        0,
-        "Rank",
-        range(1, len(ranking_df) + 1)
-    )
+# =====================================================
+# SUMMARY TABLE
+# =====================================================
 
-    return ranking_df
+st.subheader("📋 Comparison Table")
 
+st.dataframe(
+    summary,
+    use_container_width=True
+)
 
-# --------------------------------------------------
-# INSIDER ACTIVITY COMPARISON
-# --------------------------------------------------
+# =====================================================
+# METRIC SELECTOR
+# =====================================================
 
-def compare_insider_activity(insider_df: pd.DataFrame, companies: list):
-    """
-    Compare insider trading activity across companies.
-    """
+st.subheader("📈 Metric Comparison")
 
-    if insider_df.empty:
-        return pd.DataFrame()
+metric = st.selectbox(
+    "Select Metric",
+    numeric_cols
+)
 
-    results = []
+# =====================================================
+# BAR CHART
+# =====================================================
 
-    for company in companies:
+fig1 = px.bar(
+    summary,
+    x=company_col,
+    y=metric,
+    color=company_col,
+    title=f"{metric} Comparison"
+)
 
-        df = insider_df[
-            insider_df["Company"] == company
-        ] if "Company" in insider_df.columns else pd.DataFrame()
+st.plotly_chart(
+    fig1,
+    use_container_width=True
+)
 
-        buy_count = 0
-        sell_count = 0
+# =====================================================
+# LINE COMPARISON
+# =====================================================
 
-        if not df.empty and "TransactionType" in df.columns:
+fig2 = px.line(
+    summary,
+    x=company_col,
+    y=metric,
+    markers=True,
+    title=f"{metric} Trend"
+)
 
-            buy_count = len(
-                df[
-                    df["TransactionType"]
-                    .astype(str)
-                    .str.upper()
-                    .str.contains("BUY")
-                ]
+st.plotly_chart(
+    fig2,
+    use_container_width=True
+)
+
+# =====================================================
+# RADAR CHART
+# =====================================================
+
+st.subheader("🕸 Radar Comparison")
+
+radar_metrics = numeric_cols[:6]
+
+if len(radar_metrics) >= 3:
+
+    radar_df = summary.copy()
+
+    for m in radar_metrics:
+
+        max_val = radar_df[m].max()
+
+        if max_val > 0:
+            radar_df[m] = (
+                radar_df[m] / max_val
+            ) * 100
+
+    radar = go.Figure()
+
+    for _, row in radar_df.iterrows():
+
+        radar.add_trace(
+            go.Scatterpolar(
+                r=[
+                    row[m]
+                    for m in radar_metrics
+                ],
+                theta=radar_metrics,
+                fill='toself',
+                name=row[company_col]
             )
-
-            sell_count = len(
-                df[
-                    df["TransactionType"]
-                    .astype(str)
-                    .str.upper()
-                    .str.contains("SELL")
-                ]
-            )
-
-        results.append({
-            "Company": company,
-            "Insider Buys": buy_count,
-            "Insider Sells": sell_count,
-            "Net Flow": buy_count - sell_count
-        })
-
-    return pd.DataFrame(results)
-
-
-# --------------------------------------------------
-# HOLDINGS COMPARISON
-# --------------------------------------------------
-
-def compare_holdings(holdings_df: pd.DataFrame, companies: list):
-    """
-    Compare institutional holdings across companies.
-    """
-
-    if holdings_df.empty:
-        return pd.DataFrame()
-
-    df = holdings_df[
-        holdings_df["Company"].isin(companies)
-    ].copy()
-
-    if df.empty:
-        return pd.DataFrame()
-
-    summary = (
-        df.groupby("Company")
-        .agg(
-            TotalInstitutions=("Company", "count"),
-            AvgOwnership=("OwnershipPercent", "mean") if "OwnershipPercent" in df.columns else ("Company", "count")
         )
-        .reset_index()
+
+    radar.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True
+            )
+        ),
+        showlegend=True
     )
 
-    return summary
+    st.plotly_chart(
+        radar,
+        use_container_width=True
+    )
 
+# =====================================================
+# HEATMAP
+# =====================================================
 
-# --------------------------------------------------
-# MULTI-DIMENSION SCORING
-# --------------------------------------------------
+st.subheader("🔥 Correlation Matrix")
 
-def multi_factor_score(row: pd.Series):
-    """
-    Advanced composite scoring model for ranking.
-    """
+corr = (
+    summary[numeric_cols]
+    .corr()
+)
 
-    score = 0
+heatmap = go.Figure(
+    data=go.Heatmap(
+        z=corr.values,
+        x=corr.columns,
+        y=corr.columns
+    )
+)
 
-    try:
-        # Growth
-        growth = float(row.get("RevenueGrowth", 0) or 0)
-        score += growth * 0.4
+heatmap.update_layout(
+    title="Metric Correlation"
+)
 
-        # Institutional strength
-        inst = float(row.get("InstitutionalOwnership", 0) or 0)
-        score += inst * 0.3
+st.plotly_chart(
+    heatmap,
+    use_container_width=True
+)
 
-        # Risk penalty
-        risk = calculate_risk_score(row)
-        score -= risk * 0.5
+# =====================================================
+# RANKING ENGINE
+# =====================================================
 
-        # Market cap stability
-        mcap = float(row.get("MarketCap", 0) or 0)
-        if mcap > 1e11:
-            score += 10
-        elif mcap < 1e9:
-            score -= 10
+st.subheader("🏆 AI Ranking Engine")
 
-    except:
-        pass
+rank_df = summary.copy()
 
-    return round(score, 2)
+rank_df["overall_score"] = 0
 
+for col in numeric_cols:
 
-# --------------------------------------------------
-# BEST WORST COMPARISON
-# --------------------------------------------------
+    rank_df["overall_score"] += (
+        rank_df[col]
+        .rank(
+            ascending=False,
+            method="average"
+        )
+    )
 
-def best_worst(df: pd.DataFrame, metric: str):
-    """
-    Return best and worst companies for a given metric.
-    """
+rank_df = rank_df.sort_values(
+    "overall_score"
+)
 
-    if df.empty or metric not in df.columns:
-        return None, None
+rank_df["rank"] = (
+    range(
+        1,
+        len(rank_df) + 1
+    )
+)
 
-    best = df.loc[df[metric].idxmax()]
-    worst = df.loc[df[metric].idxmin()]
+ranking_display = rank_df[
+    [
+        "rank",
+        company_col,
+        "overall_score"
+    ]
+]
 
-    return best, worst
-```
+st.dataframe(
+    ranking_display,
+    use_container_width=True
+)
+
+# =====================================================
+# TOP COMPANY
+# =====================================================
+
+best_company = (
+    rank_df.iloc[0][company_col]
+)
+
+st.success(
+    f"🏆 Highest Ranked Company: {best_company}"
+)
+
+# =====================================================
+# SCORE DISTRIBUTION
+# =====================================================
+
+st.subheader("📊 Overall Score Distribution")
+
+fig3 = px.bar(
+    rank_df,
+    x=company_col,
+    y="overall_score",
+    color="overall_score",
+    title="Company Scores"
+)
+
+st.plotly_chart(
+    fig3,
+    use_container_width=True
+)
+
+# =====================================================
+# AI INSIGHTS
+# =====================================================
+
+st.subheader("🤖 AI Insights")
+
+highest_metric_company = (
+    summary.loc[
+        summary[metric].idxmax(),
+        company_col
+    ]
+)
+
+lowest_metric_company = (
+    summary.loc[
+        summary[metric].idxmin(),
+        company_col
+    ]
+)
+
+st.info(f"""
+Comparison completed across
+{len(selected_companies)} companies.
+
+Selected metric:
+{metric}
+
+Highest value:
+{highest_metric_company}
+
+Lowest value:
+{lowest_metric_company}
+
+Top ranked company:
+{best_company}
+
+The ranking engine evaluates all
+available numerical metrics and
+generates a composite score to
+identify relative leaders and laggards.
+
+Use this comparison together with
+qualitative analysis and market research
+for deeper investment insights.
+""")
+
+# =====================================================
+# RAW DATA
+# =====================================================
+
+with st.expander("📂 View Raw Records"):
+
+    st.dataframe(
+        compare_df,
+        use_container_width=True,
+        height=500
+    )
+
+# =====================================================
+# EXPORT REPORT
+# =====================================================
+
+st.subheader("📥 Export Comparison Report")
+
+csv = rank_df.to_csv(
+    index=False
+).encode("utf-8")
+
+st.download_button(
+    "Download Comparison Report",
+    data=csv,
+    file_name="comparison_engine_report.csv",
+    mime="text/csv"
+)
+
+# =====================================================
+# EXPORT SUMMARY
+# =====================================================
+
+summary_csv = summary.to_csv(
+    index=False
+).encode("utf-8")
+
+st.download_button(
+    "Download Summary Metrics",
+    data=summary_csv,
+    file_name="comparison_summary.csv",
+    mime="text/csv"
+)

@@ -1,201 +1,451 @@
-```python id="predictor_utils_001"
-# utils/predictor.py
+ # pages/predictor.py
 
-import numpy as np
+import streamlit as st
 import pandas as pd
+import numpy as np
+import plotly.express as px
 
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    accuracy_score,
+    classification_report
+)
 
+from utils.data_loader import load_master_data
 
-# --------------------------------------------------
-# FEATURE ENGINEERING
-# --------------------------------------------------
+# =====================================================
+# PAGE CONFIG
+# =====================================================
 
-def prepare_prediction_features(df: pd.DataFrame):
-    """
-    Prepare features for smart money prediction model.
-    """
+st.set_page_config(
+    page_title="AI Predictor",
+    page_icon="🔮",
+    layout="wide"
+)
 
-    features = [
-        "InsiderBuyScore",
-        "InsiderSellScore",
-        "InstitutionalOwnership",
-        "RevenueGrowth",
-        "Debt",
-        "MarketCap"
+st.title("🔮 AI Prediction Engine")
+st.caption(
+    "Machine Learning Predictions for Institutional Analytics"
+)
+
+# =====================================================
+# LOAD DATA
+# =====================================================
+
+@st.cache_data
+def get_data():
+    return load_master_data()
+
+df = get_data()
+
+# =====================================================
+# DATA OVERVIEW
+# =====================================================
+
+st.subheader("Dataset Overview")
+
+c1, c2, c3 = st.columns(3)
+
+c1.metric("Rows", f"{len(df):,}")
+c2.metric("Columns", len(df.columns))
+c3.metric(
+    "Numeric Columns",
+    len(
+        df.select_dtypes(
+            include=np.number
+        ).columns
+    )
+)
+
+# =====================================================
+# TARGET SELECTION
+# =====================================================
+
+numeric_cols = (
+    df.select_dtypes(include=np.number)
+    .columns
+    .tolist()
+)
+
+if len(numeric_cols) < 2:
+    st.error(
+        "Need at least 2 numerical columns."
+    )
+    st.stop()
+
+st.sidebar.header("Prediction Settings")
+
+target = st.sidebar.selectbox(
+    "Target Variable",
+    numeric_cols
+)
+
+features = st.sidebar.multiselect(
+    "Feature Columns",
+    [col for col in numeric_cols if col != target],
+    default=[
+        col for col in numeric_cols
+        if col != target
+    ][:5]
+)
+
+if len(features) < 1:
+    st.warning(
+        "Please select at least one feature."
+    )
+    st.stop()
+
+# =====================================================
+# PREPARE DATA
+# =====================================================
+
+model_df = df[
+    features + [target]
+].copy()
+
+model_df = (
+    model_df
+    .replace(
+        [np.inf, -np.inf],
+        np.nan
+    )
+)
+
+model_df = model_df.fillna(
+    model_df.median(
+        numeric_only=True
+    )
+)
+
+X = model_df[features]
+y = model_df[target]
+
+# =====================================================
+# MODEL TYPE
+# =====================================================
+
+prediction_type = st.sidebar.radio(
+    "Prediction Type",
+    [
+        "Regression",
+        "Classification"
     ]
+)
 
-    working_df = df.copy()
+# =====================================================
+# TRAIN TEST SPLIT
+# =====================================================
 
-    used_features = []
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.20,
+    random_state=42
+)
 
-    for col in features:
-        if col in working_df.columns:
-            working_df[col] = pd.to_numeric(
-                working_df[col],
-                errors="coerce"
-            )
-            used_features.append(col)
+# =====================================================
+# REGRESSION MODEL
+# =====================================================
 
-    working_df = working_df.dropna(subset=used_features)
+if prediction_type == "Regression":
 
-    return working_df, used_features
-
-
-# --------------------------------------------------
-# TRAIN / PREDICT MODEL
-# --------------------------------------------------
-
-def train_model(df: pd.DataFrame):
-    """
-    Train RandomForest model for smart money prediction.
-    """
-
-    working_df, features = prepare_prediction_features(df)
-
-    if len(features) == 0:
-        raise ValueError("No valid features found")
-
-    # Synthetic label creation (if no target exists)
-    # Bullish = low risk + high insider buying
-    y = np.where(
-        (working_df.get("InsiderBuyScore", 0) > working_df.get("InsiderSellScore", 0))
-        & (working_df.get("RevenueGrowth", 0) > 0),
-        1,
-        0
+    model = RandomForestRegressor(
+        n_estimators=300,
+        random_state=42,
+        n_jobs=-1
     )
 
-    X = working_df[features]
+    model.fit(
+        X_train,
+        y_train
+    )
 
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    predictions = model.predict(
+        X_test
+    )
+
+    mae = mean_absolute_error(
+        y_test,
+        predictions
+    )
+
+    rmse = np.sqrt(
+        mean_squared_error(
+            y_test,
+            predictions
+        )
+    )
+
+    r2 = r2_score(
+        y_test,
+        predictions
+    )
+
+    st.subheader(
+        "📊 Regression Performance"
+    )
+
+    c1, c2, c3 = st.columns(3)
+
+    c1.metric(
+        "MAE",
+        f"{mae:.4f}"
+    )
+
+    c2.metric(
+        "RMSE",
+        f"{rmse:.4f}"
+    )
+
+    c3.metric(
+        "R² Score",
+        f"{r2:.4f}"
+    )
+
+    # Actual vs Predicted
+
+    results = pd.DataFrame({
+        "Actual": y_test,
+        "Predicted": predictions
+    })
+
+    st.subheader(
+        "Actual vs Predicted"
+    )
+
+    fig1 = px.scatter(
+        results,
+        x="Actual",
+        y="Predicted",
+        title="Prediction Accuracy"
+    )
+
+    st.plotly_chart(
+        fig1,
+        use_container_width=True
+    )
+
+# =====================================================
+# CLASSIFICATION MODEL
+# =====================================================
+
+else:
+
+    y_class = pd.qcut(
+        y,
+        q=3,
+        labels=[
+            "Low",
+            "Medium",
+            "High"
+        ],
+        duplicates="drop"
+    )
+
+    X_train, X_test, y_train, y_test = (
+        train_test_split(
+            X,
+            y_class,
+            test_size=0.20,
+            random_state=42
+        )
+    )
 
     model = RandomForestClassifier(
-        n_estimators=200,
-        random_state=42
+        n_estimators=300,
+        random_state=42,
+        n_jobs=-1
     )
 
-    model.fit(X_scaled, y)
-
-    return model, scaler, features
-
-
-# --------------------------------------------------
-# PREDICTION ENGINE
-# --------------------------------------------------
-
-def predict_signal(model, scaler, features, df: pd.DataFrame):
-    """
-    Predict bullish/bearish signal.
-    """
-
-    working_df = df.copy()
-
-    for col in features:
-        working_df[col] = pd.to_numeric(
-            working_df[col],
-            errors="coerce"
-        )
-
-    working_df = working_df.dropna(subset=features)
-
-    X = scaler.transform(working_df[features])
-
-    predictions = model.predict(X)
-    probabilities = model.predict_proba(X)
-
-    working_df["Signal"] = np.where(
-        predictions == 1,
-        "Bullish",
-        "Bearish"
+    model.fit(
+        X_train,
+        y_train
     )
 
-    working_df["BullishProb"] = probabilities[:, 1]
-    working_df["BearishProb"] = probabilities[:, 0]
+    predictions = model.predict(
+        X_test
+    )
 
-    return working_df
+    accuracy = accuracy_score(
+        y_test,
+        predictions
+    )
 
+    st.subheader(
+        "📊 Classification Performance"
+    )
 
-# --------------------------------------------------
-# SINGLE COMPANY PREDICTION
-# --------------------------------------------------
+    st.metric(
+        "Accuracy",
+        f"{accuracy:.2%}"
+    )
 
-def predict_company_signal(row: pd.Series):
-    """
-    Lightweight heuristic fallback predictor (no ML required).
-    """
+    report = classification_report(
+        y_test,
+        predictions,
+        output_dict=True
+    )
 
-    score = 0
+    report_df = pd.DataFrame(
+        report
+    ).transpose()
 
-    try:
-        buy = float(row.get("InsiderBuyScore", 0) or 0)
-        sell = float(row.get("InsiderSellScore", 0) or 0)
-        growth = float(row.get("RevenueGrowth", 0) or 0)
-        inst = float(row.get("InstitutionalOwnership", 0) or 0)
-        debt = float(row.get("Debt", 0) or 0)
+    st.dataframe(
+        report_df,
+        use_container_width=True
+    )
 
-        # Insider sentiment
-        if buy > sell:
-            score += 30
-        else:
-            score -= 20
+# =====================================================
+# FEATURE IMPORTANCE
+# =====================================================
 
-        # Growth
-        if growth > 10:
-            score += 25
-        elif growth < 0:
-            score -= 25
+st.subheader(
+    "🎯 Feature Importance"
+)
 
-        # Institutional support
-        if inst > 50:
-            score += 15
-        elif inst < 20:
-            score -= 10
+importance_df = pd.DataFrame({
+    "Feature": features,
+    "Importance":
+    model.feature_importances_
+})
 
-        # Debt penalty
-        if debt > 1e9:
-            score -= 20
+importance_df = (
+    importance_df
+    .sort_values(
+        "Importance",
+        ascending=False
+    )
+)
 
-    except:
-        pass
+fig2 = px.bar(
+    importance_df,
+    x="Feature",
+    y="Importance",
+    title="Model Feature Importance"
+)
 
-    if score >= 20:
-        signal = "Bullish"
-        confidence = min(95, 60 + score)
-    elif score <= -10:
-        signal = "Bearish"
-        confidence = min(90, 60 + abs(score))
-    else:
-        signal = "Neutral"
-        confidence = 55
+st.plotly_chart(
+    fig2,
+    use_container_width=True
+)
 
-    return {
-        "Signal": signal,
-        "Confidence": round(confidence, 2),
-        "Score": round(score, 2)
-    }
+# =====================================================
+# PREDICTION SIMULATOR
+# =====================================================
 
+st.subheader(
+    "🧪 Prediction Simulator"
+)
 
-# --------------------------------------------------
-# FEATURE IMPORTANCE (EXPLAINABILITY)
-# --------------------------------------------------
+user_inputs = {}
 
-def feature_importance(model, features):
-    """
-    Return feature importance from trained model.
-    """
+for feature in features:
 
-    try:
-        importance = model.feature_importances_
+    default_value = float(
+        model_df[feature].median()
+    )
 
-        return pd.DataFrame({
-            "Feature": features,
-            "Importance": importance
-        }).sort_values(
-            by="Importance",
-            ascending=False
-        )
-    except:
-        return pd.DataFrame()
-```
+    user_inputs[feature] = st.number_input(
+        feature,
+        value=default_value
+    )
+
+input_df = pd.DataFrame(
+    [user_inputs]
+)
+
+prediction = model.predict(
+    input_df
+)
+
+st.success(
+    f"Predicted Value: {prediction[0]}"
+)
+
+# =====================================================
+# TOP PREDICTIONS
+# =====================================================
+
+st.subheader(
+    "📈 Sample Predictions"
+)
+
+sample = X_test.head(50)
+
+sample_predictions = model.predict(
+    sample
+)
+
+prediction_df = sample.copy()
+
+prediction_df["Prediction"] = (
+    sample_predictions
+)
+
+st.dataframe(
+    prediction_df,
+    use_container_width=True
+)
+
+# =====================================================
+# AI INSIGHTS
+# =====================================================
+
+st.subheader(
+    "🤖 AI Insights"
+)
+
+top_feature = (
+    importance_df
+    .iloc[0]["Feature"]
+)
+
+st.info(f"""
+Target Variable:
+{target}
+
+Model Type:
+{prediction_type}
+
+Top Predictive Feature:
+{top_feature}
+
+Features Used:
+{len(features)}
+
+Records Trained:
+{len(X_train):,}
+
+Records Tested:
+{len(X_test):,}
+
+The prediction engine uses a Random Forest
+model to identify patterns in institutional
+and market data. Feature importance helps
+explain which variables have the strongest
+impact on the selected target.
+""")
+
+# =====================================================
+# DOWNLOAD RESULTS
+# =====================================================
+
+st.subheader(
+    "📥 Export Results"
+)
+
+csv = importance_df.to_csv(
+    index=False
+).encode("utf-8")
+
+st.download_button(
+    "Download Feature Importance",
+    csv,
+    "feature_importance.csv",
+    "text/csv"
+)

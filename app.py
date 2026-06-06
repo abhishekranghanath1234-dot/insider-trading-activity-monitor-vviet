@@ -1,4 +1,4 @@
-import streamlit as st
+ import streamlit as st
 from pathlib import Path
 
 # =====================================================
@@ -13,17 +13,14 @@ st.set_page_config(
 )
 
 # =====================================================
-# CUSTOM CSS
+# LOAD CUSTOM CSS
 # =====================================================
 
-css_file = Path("assets/styles.css")
-
-if css_file.exists():
-    with open(css_file, "r", encoding="utf-8") as f:
-        st.markdown(
-            f"<style>{f.read()}</style>",
-            unsafe_allow_html=True
-        )
+with open("assets/style.css", "r", encoding="utf-8") as f:
+    st.markdown(
+        f"<style>{f.read()}</style>",
+        unsafe_allow_html=True
+    )
 
 # =====================================================
 # SIDEBAR
@@ -40,8 +37,7 @@ with st.sidebar:
 
     st.markdown("---")
 
-    st.markdown(
-        """
+    st.markdown("""
 ### Platform Modules
 
 📊 Dashboard
@@ -53,27 +49,30 @@ with st.sidebar:
 🚨 Smart Money Signals
 
 🤖 AI Insights
-"""
-    )
+""")
 
     st.markdown("---")
 
-    st.info(
-        """
+    st.info("""
 Monitor institutional investors,
 insider trades, whale positions,
 and AI-powered investment signals.
-"""
-    )
+""")
 
 # =====================================================
-# HERO SECTION
+# PREMIUM HERO SECTION
 # =====================================================
 
-st.title("📈 Smart Money Surveillance Platform")
+st.markdown("""
+<div class="hero-header">
+    <h1>📈 Smart Money Surveillance</h1>
+    <p>
+        AI-Powered Institutional Intelligence Platform
+    </p>
+</div>
+""", unsafe_allow_html=True)
 
-st.markdown(
-    """
+st.markdown("""
 ### Institutional Intelligence Platform
 
 Track:
@@ -86,40 +85,27 @@ Track:
 - AI Generated Insights
 
 Built with Streamlit, Plotly, Pandas and AI.
-"""
-)
+""")
 
 st.divider()
 
 # =====================================================
-# OVERVIEW CARDS
+# KPI SECTION
 # =====================================================
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(
-        "Modules",
-        "5"
-    )
+    st.metric("Modules", "5")
 
 with col2:
-    st.metric(
-        "Analytics",
-        "25+"
-    )
+    st.metric("Analytics", "25+")
 
 with col3:
-    st.metric(
-        "Charts",
-        "15+"
-    )
+    st.metric("Charts", "15+")
 
 with col4:
-    st.metric(
-        "AI Reports",
-        "Enabled"
-    )
+    st.metric("AI Reports", "Enabled")
 
 st.divider()
 
@@ -131,55 +117,51 @@ col1, col2 = st.columns(2)
 
 with col1:
 
-    st.subheader("🏛 Institutional Intelligence")
+    st.markdown("""
+<div class="glass">
+<h3>🏛 Institutional Intelligence</h3>
 
-    st.markdown(
-        """
 - Top Institutional Holders
 - Portfolio Allocation
 - Sector Analysis
 - Whale Tracking
 - Conviction Rankings
-"""
-    )
 
-    st.subheader("👨‍💼 Insider Monitoring")
+<br>
 
-    st.markdown(
-        """
+<h3>👨‍💼 Insider Monitoring</h3>
+
 - Executive Purchases
 - Executive Sales
 - Confidence Scores
 - Transaction Timeline
 - Insider Sentiment
-"""
-    )
+</div>
+""", unsafe_allow_html=True)
 
 with col2:
 
-    st.subheader("🚨 Smart Money Signals")
+    st.markdown("""
+<div class="glass">
+<h3>🚨 Smart Money Signals</h3>
 
-    st.markdown(
-        """
 - Signal Scoring Engine
 - Buy/Sell Recommendations
 - Opportunity Ranking
 - Sector Heatmaps
 - Cross-Market Analytics
-"""
-    )
 
-    st.subheader("🤖 AI Intelligence")
+<br>
 
-    st.markdown(
-        """
+<h3>🤖 AI Intelligence</h3>
+
 - Automated Reports
 - Whale Detection
 - Risk Analysis
 - GPT Insights
 - Investment Summaries
-"""
-    )
+</div>
+""", unsafe_allow_html=True)
 
 st.divider()
 
@@ -207,16 +189,14 @@ st.divider()
 
 st.subheader("🚀 Quick Start")
 
-st.markdown(
-    """
+st.markdown("""
 1. Open the sidebar navigation.
 2. Select Dashboard for overview analytics.
 3. Explore Insider Transactions.
 4. Review Institutional Holdings.
 5. Analyze Smart Money Signals.
 6. Generate AI Insights.
-"""
-)
+""")
 
 st.divider()
 
@@ -226,8 +206,7 @@ st.divider()
 
 with st.expander("📁 Project Structure"):
 
-    st.code(
-        """
+    st.code("""
 smart-money-surveillance/
 │
 ├── app.py
@@ -236,7 +215,7 @@ smart-money-surveillance/
 │
 ├── assets/
 │   ├── logo.png
-│   └── styles.css
+│   └── style.css
 │
 ├── data/
 │   ├── MASTER_DATA_ENRICHED.csv
@@ -255,8 +234,7 @@ smart-money-surveillance/
     ├── analytics.py
     ├── charts.py
     └── data_loader.py
-"""
-    )
+""")
 
 # =====================================================
 # FOOTER
@@ -264,12 +242,14 @@ smart-money-surveillance/
 
 st.markdown("---")
 
-st.markdown(
-    """
-### 🧠 Smart Money Surveillance
+st.markdown("""
+<div class="footer">
+<h4>🧠 Smart Money Surveillance</h4>
 
 Institutional Holdings • Insider Trading • Smart Money Signals • AI Research
 
+<br><br>
+
 Built using Streamlit + Plotly + Python
-"""
-)
+</div>
+""", unsafe_allow_html=True)

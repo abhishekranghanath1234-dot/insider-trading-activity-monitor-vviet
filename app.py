@@ -1,255 +1,429 @@
  import streamlit as st
-from pathlib import Path
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
 
-# =====================================================
+from sklearn.ensemble import IsolationForest
+
+# ---------------------------------------------------
 # PAGE CONFIG
-# =====================================================
+# ---------------------------------------------------
 
 st.set_page_config(
-    page_title="Smart Money Surveillance",
-    page_icon="📈",
-    layout="wide",
-    initial_sidebar_state="expanded"
+    page_title="Insider Trading Activity Monitor",
+    page_icon="📊",
+    layout="wide"
 )
 
-# =====================================================
-# LOAD CUSTOM CSS
-# =====================================================
-
-with open("assets/style.css", "r", encoding="utf-8") as f:
-    st.markdown(
-        f"<style>{f.read()}</style>",
-        unsafe_allow_html=True
-    )
-
-# =====================================================
-# SIDEBAR
-# =====================================================
-
-with st.sidebar:
-
-    logo_path = Path("assets/logo.png")
-
-    if logo_path.exists():
-        st.image(str(logo_path), use_container_width=True)
-
-    st.title("Smart Money Surveillance")
-
-    st.markdown("---")
-
-    st.markdown("""
-### Platform Modules
-
-📊 Dashboard
-
-👨‍💼 Insider Transactions
-
-🏛 Institutional Holdings
-
-🚨 Smart Money Signals
-
-🤖 AI Insights
-""")
-
-    st.markdown("---")
-
-    st.info("""
-Monitor institutional investors,
-insider trades, whale positions,
-and AI-powered investment signals.
-""")
-
-# =====================================================
-# PREMIUM HERO SECTION
-# =====================================================
+# ---------------------------------------------------
+# CUSTOM CSS
+# ---------------------------------------------------
 
 st.markdown("""
-<div class="hero-header">
-    <h1>📈 Smart Money Surveillance</h1>
-    <p>
-        AI-Powered Institutional Intelligence Platform
-    </p>
-</div>
+<style>
+
+.main {
+    background-color: #0E1117;
+}
+
+.metric-card {
+    background-color:#1E1E1E;
+    padding:15px;
+    border-radius:10px;
+}
+
+h1,h2,h3 {
+    color:white;
+}
+
+</style>
 """, unsafe_allow_html=True)
+
+# ---------------------------------------------------
+# HEADER
+# ---------------------------------------------------
+
+st.title("📈 Insider Trading Activity Monitor")
 
 st.markdown("""
-### Institutional Intelligence Platform
-
-Track:
-
-- Insider Transactions
-- Institutional Holdings
-- Whale Activity
-- Conviction Scores
-- Smart Money Signals
-- AI Generated Insights
-
-Built with Streamlit, Plotly, Pandas and AI.
+Monitor insider buying, selling activity,
+detect anomalies and generate AI insights.
 """)
 
-st.divider()
+# ---------------------------------------------------
+# FILE UPLOAD
+# ---------------------------------------------------
 
-# =====================================================
-# KPI SECTION
-# =====================================================
+uploaded_file = st.sidebar.file_uploader(
+    "Upload Insider Trading Dataset",
+    type=["csv"]
+)
 
-col1, col2, col3, col4 = st.columns(4)
+if uploaded_file:
 
-with col1:
-    st.metric("Modules", "5")
+    df = pd.read_csv(uploaded_file)
 
-with col2:
-    st.metric("Analytics", "25+")
+else:
 
-with col3:
-    st.metric("Charts", "15+")
+    st.warning("Upload a CSV file to continue.")
+    st.stop()
 
-with col4:
-    st.metric("AI Reports", "Enabled")
+# ---------------------------------------------------
+# DATA CLEANING
+# ---------------------------------------------------
 
-st.divider()
+df.columns = df.columns.str.lower()
 
-# =====================================================
-# FEATURE GRID
-# =====================================================
-
-col1, col2 = st.columns(2)
-
-with col1:
-
-    st.markdown("""
-<div class="glass">
-<h3>🏛 Institutional Intelligence</h3>
-
-- Top Institutional Holders
-- Portfolio Allocation
-- Sector Analysis
-- Whale Tracking
-- Conviction Rankings
-
-<br>
-
-<h3>👨‍💼 Insider Monitoring</h3>
-
-- Executive Purchases
-- Executive Sales
-- Confidence Scores
-- Transaction Timeline
-- Insider Sentiment
-</div>
-""", unsafe_allow_html=True)
-
-with col2:
-
-    st.markdown("""
-<div class="glass">
-<h3>🚨 Smart Money Signals</h3>
-
-- Signal Scoring Engine
-- Buy/Sell Recommendations
-- Opportunity Ranking
-- Sector Heatmaps
-- Cross-Market Analytics
-
-<br>
-
-<h3>🤖 AI Intelligence</h3>
-
-- Automated Reports
-- Whale Detection
-- Risk Analysis
-- GPT Insights
-- Investment Summaries
-</div>
-""", unsafe_allow_html=True)
-
-st.divider()
-
-# =====================================================
-# DATASETS
-# =====================================================
-
-st.subheader("📂 Connected Datasets")
-
-datasets = [
-    "MASTER_DATA_ENRICHED.csv",
-    "PREMIUM_CROSS_MARKET_SIGNALS.csv",
-    "insider_transactions_data.csv",
-    "institutional_holdings_data.csv"
+date_cols = [
+    col for col in df.columns
+    if "date" in col
 ]
 
-for dataset in datasets:
-    st.success(f"✓ {dataset}")
+for col in date_cols:
+    try:
+        df[col] = pd.to_datetime(df[col])
+    except:
+        pass
+
+# ---------------------------------------------------
+# DETECT IMPORTANT COLUMNS
+# ---------------------------------------------------
+
+company_col = None
+shares_col = None
+price_col = None
+owner_col = None
+
+for col in df.columns:
+
+    if "company" in col:
+        company_col = col
+
+    if "share" in col:
+        shares_col = col
+
+    if "price" in col:
+        price_col = col
+
+    if "owner" in col:
+        owner_col = col
+
+# ---------------------------------------------------
+# CREATE TRANSACTION VALUE
+# ---------------------------------------------------
+
+if shares_col and price_col:
+
+    df["transaction_value"] = (
+        pd.to_numeric(df[shares_col], errors="coerce")
+        *
+        pd.to_numeric(df[price_col], errors="coerce")
+    )
+
+else:
+
+    df["transaction_value"] = 0
+
+# ---------------------------------------------------
+# KPI SECTION
+# ---------------------------------------------------
+
+total_transactions = len(df)
+
+total_value = df["transaction_value"].sum()
+
+avg_value = df["transaction_value"].mean()
+
+unique_companies = (
+    df[company_col].nunique()
+    if company_col
+    else 0
+)
+
+col1,col2,col3,col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Transactions",
+        f"{total_transactions:,}"
+    )
+
+with col2:
+    st.metric(
+        "Companies",
+        f"{unique_companies:,}"
+    )
+
+with col3:
+    st.metric(
+        "Transaction Value",
+        f"${total_value:,.0f}"
+    )
+
+with col4:
+    st.metric(
+        "Avg Value",
+        f"${avg_value:,.0f}"
+    )
 
 st.divider()
 
-# =====================================================
-# QUICK START
-# =====================================================
+# ---------------------------------------------------
+# SIDEBAR FILTERS
+# ---------------------------------------------------
 
-st.subheader("🚀 Quick Start")
+if company_col:
 
-st.markdown("""
-1. Open the sidebar navigation.
-2. Select Dashboard for overview analytics.
-3. Explore Insider Transactions.
-4. Review Institutional Holdings.
-5. Analyze Smart Money Signals.
-6. Generate AI Insights.
-""")
+    companies = sorted(
+        df[company_col].dropna().unique()
+    )
 
-st.divider()
+    selected_companies = st.sidebar.multiselect(
+        "Select Companies",
+        companies
+    )
 
-# =====================================================
-# PROJECT STRUCTURE
-# =====================================================
+    if selected_companies:
 
-with st.expander("📁 Project Structure"):
+        df = df[
+            df[company_col].isin(selected_companies)
+        ]
 
-    st.code("""
-smart-money-surveillance/
-│
-├── app.py
-├── requirements.txt
-├── README.md
-│
-├── assets/
-│   ├── logo.png
-│   └── style.css
-│
-├── data/
-│   ├── MASTER_DATA_ENRICHED.csv
-│   ├── PREMIUM_CROSS_MARKET_SIGNALS.csv
-│   ├── insider_transactions_data.csv
-│   └── institutional_holdings_data.csv
-│
-├── pages/
-│   ├── 1_Dashboard.py
-│   ├── 2_Insider_Transactions.py
-│   ├── 3_Institutional_Holdings.py
-│   ├── 4_Smart_Money_Signals.py
-│   └── 5_AI_Insights.py
-│
-└── utils/
-    ├── analytics.py
-    ├── charts.py
-    └── data_loader.py
-""")
+# ---------------------------------------------------
+# TRANSACTION TREND
+# ---------------------------------------------------
 
-# =====================================================
-# FOOTER
-# =====================================================
+st.subheader("📅 Insider Activity Trend")
 
-st.markdown("---")
+date_column = None
 
-st.markdown("""
-<div class="footer">
-<h4>🧠 Smart Money Surveillance</h4>
+for col in df.columns:
 
-Institutional Holdings • Insider Trading • Smart Money Signals • AI Research
+    if "date" in col:
+        date_column = col
+        break
 
-<br><br>
+if date_column:
 
-Built using Streamlit + Plotly + Python
-</div>
-""", unsafe_allow_html=True)
+    trend = (
+        df.groupby(date_column)
+        .size()
+        .reset_index(name="transactions")
+    )
+
+    fig = px.line(
+        trend,
+        x=date_column,
+        y="transactions",
+        markers=True,
+        title="Transaction Trend"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ---------------------------------------------------
+# TOP COMPANIES
+# ---------------------------------------------------
+
+if company_col:
+
+    st.subheader("🏢 Top Active Companies")
+
+    company_summary = (
+        df.groupby(company_col)
+        .size()
+        .reset_index(name="count")
+        .sort_values(
+            "count",
+            ascending=False
+        )
+        .head(15)
+    )
+
+    fig = px.bar(
+        company_summary,
+        x=company_col,
+        y="count",
+        title="Most Active Companies"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ---------------------------------------------------
+# TRANSACTION VALUE HISTOGRAM
+# ---------------------------------------------------
+
+st.subheader("💰 Transaction Value Distribution")
+
+fig = px.histogram(
+    df,
+    x="transaction_value",
+    nbins=50
+)
+
+st.plotly_chart(
+    fig,
+    use_container_width=True
+)
+
+# ---------------------------------------------------
+# TOP INSIDERS
+# ---------------------------------------------------
+
+if owner_col:
+
+    st.subheader("👤 Most Active Insiders")
+
+    insider_summary = (
+        df.groupby(owner_col)
+        .size()
+        .reset_index(name="transactions")
+        .sort_values(
+            "transactions",
+            ascending=False
+        )
+        .head(20)
+    )
+
+    fig = px.bar(
+        insider_summary,
+        x=owner_col,
+        y="transactions"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+# ---------------------------------------------------
+# ANOMALY DETECTION
+# ---------------------------------------------------
+
+st.subheader("🚨 Insider Trading Anomaly Detection")
+
+features = pd.DataFrame()
+
+features["transaction_value"] = (
+    df["transaction_value"]
+    .fillna(0)
+)
+
+if shares_col:
+
+    features["shares"] = (
+        pd.to_numeric(
+            df[shares_col],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+
+if len(features) > 20:
+
+    model = IsolationForest(
+        contamination=0.03,
+        random_state=42
+    )
+
+    df["anomaly"] = model.fit_predict(
+        features
+    )
+
+    anomalies = df[
+        df["anomaly"] == -1
+    ]
+
+    fig = px.scatter(
+        df,
+        x=features.columns[0],
+        y=features.columns[-1],
+        color=df["anomaly"].astype(str),
+        title="Anomaly Detection"
+    )
+
+    st.plotly_chart(
+        fig,
+        use_container_width=True
+    )
+
+    st.write(
+        f"Detected {len(anomalies)} suspicious transactions."
+    )
+
+# ---------------------------------------------------
+# AI INSIGHTS
+# ---------------------------------------------------
+
+st.subheader("🤖 AI Insights")
+
+insights = []
+
+if company_col:
+
+    top_company = (
+        df[company_col]
+        .value_counts()
+        .idxmax()
+    )
+
+    insights.append(
+        f"Most insider activity observed in {top_company}."
+    )
+
+if len(df) > 0:
+
+    high_value = (
+        df["transaction_value"]
+        .quantile(0.95)
+    )
+
+    insights.append(
+        f"Top 5% transactions exceed ${high_value:,.0f}."
+    )
+
+if "anomaly" in df.columns:
+
+    anomaly_count = (
+        df["anomaly"] == -1
+    ).sum()
+
+    insights.append(
+        f"{anomaly_count} abnormal transactions detected."
+    )
+
+for item in insights:
+
+    st.success(item)
+
+# ---------------------------------------------------
+# DATA TABLE
+# ---------------------------------------------------
+
+st.subheader("📋 Insider Transactions")
+
+st.dataframe(
+    df,
+    use_container_width=True,
+    height=500
+)
+
+# ---------------------------------------------------
+# DOWNLOAD
+# ---------------------------------------------------
+
+csv = df.to_csv(index=False)
+
+st.download_button(
+    label="⬇ Download Filtered Data",
+    data=csv,
+    file_name="filtered_transactions.csv",
+    mime="text/csv"
+)

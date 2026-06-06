@@ -1,22 +1,13 @@
-```python
-# pages/5_AI_Risk_Engine.py
+ # pages/_AI_Risk_Engine.py
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
-import plotly.graph_objects as go
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.ensemble import IsolationForest
 
-from utils.data_loader import (
-    load_master_data,
-    load_insider_data,
-    load_holdings_data
-)
-
-from utils.risk_scoring import (
-    calculate_risk_score,
-    classify_risk
-)
+from utils.data_loader import load_master_data
 
 # --------------------------------------------------
 # PAGE CONFIG
@@ -24,493 +15,411 @@ from utils.risk_scoring import (
 
 st.set_page_config(
     page_title="AI Risk Engine",
-    page_icon="⚠️",
+    page_icon="🧠",
     layout="wide"
 )
 
-st.title("⚠️ AI Risk Engine")
-st.markdown(
-    "AI-powered company risk assessment using insider activity, "
-    "institutional ownership, and financial indicators."
-)
+st.title("🧠 AI Risk Engine")
+st.caption("Predictive Institutional Risk & Opportunity Scoring")
 
 # --------------------------------------------------
 # LOAD DATA
 # --------------------------------------------------
 
 @st.cache_data
-def load_data():
-    master = load_master_data()
-    insider = load_insider_data()
-    holdings = load_holdings_data()
-    return master, insider, holdings
+def get_data():
+    return load_master_data()
 
-
-master_df, insider_df, holdings_df = load_data()
+df = get_data()
 
 # --------------------------------------------------
-# VALIDATION
+# COMPANY COLUMN DETECTION
 # --------------------------------------------------
 
-if master_df.empty:
-    st.error("MASTER_DATA_ENRICHED.csv not found.")
+company_col = None
+
+for col in [
+    "company_name",
+    "issuer_name",
+    "company",
+    "issuer"
+]:
+    if col in df.columns:
+        company_col = col
+        break
+
+if company_col is None:
+    st.error("No company column found.")
     st.stop()
 
-if "Company" not in master_df.columns:
-    st.error("Column 'Company' missing in dataset.")
-    st.stop()
-
 # --------------------------------------------------
-# SIDEBAR
+# REQUIRED FEATURES
 # --------------------------------------------------
 
-st.sidebar.header("Risk Engine")
-
-company_list = sorted(
-    master_df["Company"]
-    .dropna()
-    .unique()
-)
-
-selected_company = st.sidebar.selectbox(
-    "Select Company",
-    company_list
-)
-
-# --------------------------------------------------
-# COMPANY DATA
-# --------------------------------------------------
-
-company_df = master_df[
-    master_df["Company"] == selected_company
+feature_candidates = [
+    "market_value",
+    "conviction_score",
+    "shares_owned",
+    "shares_change",
+    "ownership_percentage"
 ]
 
-if company_df.empty:
-    st.warning("No company data available.")
+features = [
+    col for col in feature_candidates
+    if col in df.columns
+]
+
+if len(features) < 2:
+    st.error("Not enough numerical features available.")
     st.stop()
 
-company = company_df.iloc[0]
-
 # --------------------------------------------------
-# CALCULATE RISK SCORE
+# PREP DATA
 # --------------------------------------------------
 
-try:
-    risk_score = calculate_risk_score(company)
-except Exception:
-    risk_score = 50
+working_df = df.copy()
 
-risk_label = classify_risk(risk_score)
-
-# --------------------------------------------------
-# HEADER METRICS
-# --------------------------------------------------
-
-col1, col2, col3 = st.columns(3)
-
-col1.metric(
-    "Risk Score",
-    f"{risk_score:.1f}"
-)
-
-col2.metric(
-    "Risk Category",
-    risk_label
-)
-
-if risk_score < 30:
-    status = "Stable"
-elif risk_score < 60:
-    status = "Monitor"
-else:
-    status = "High Alert"
-
-col3.metric(
-    "Status",
-    status
-)
-
-st.markdown("---")
-
-# --------------------------------------------------
-# RISK GAUGE
-# --------------------------------------------------
-
-st.subheader("Risk Gauge")
-
-fig = go.Figure(
-    go.Indicator(
-        mode="gauge+number",
-        value=risk_score,
-        title={"text": "Company Risk"},
-        gauge={
-            "axis": {"range": [0, 100]},
-            "bar": {"thickness": 0.4},
-            "steps": [
-                {"range": [0, 30]},
-                {"range": [30, 60]},
-                {"range": [60, 100]}
-            ]
-        }
+for col in features:
+    working_df[col] = pd.to_numeric(
+        working_df[col],
+        errors="coerce"
     )
+
+working_df[features] = (
+    working_df[features]
+    .replace([np.inf, -np.inf], np.nan)
+    .fillna(0)
+)
+
+# --------------------------------------------------
+# ANOMALY DETECTION
+# --------------------------------------------------
+
+iso = IsolationForest(
+    contamination=0.03,
+    random_state=42
+)
+
+working_df["anomaly"] = iso.fit_predict(
+    working_df[features]
+)
+
+working_df["anomaly_score"] = (
+    iso.decision_function(
+        working_df[features]
+    )
+)
+
+# --------------------------------------------------
+# COMPANY AGGREGATION
+# --------------------------------------------------
+
+agg_dict = {}
+
+if "market_value" in features:
+    agg_dict["market_value"] = "sum"
+
+if "conviction_score" in features:
+    agg_dict["conviction_score"] = "mean"
+
+if "shares_owned" in features:
+    agg_dict["shares_owned"] = "sum"
+
+if "shares_change" in features:
+    agg_dict["shares_change"] = "mean"
+
+if "ownership_percentage" in features:
+    agg_dict["ownership_percentage"] = "mean"
+
+agg_dict["anomaly_score"] = "mean"
+
+risk_df = (
+    working_df
+    .groupby(company_col)
+    .agg(agg_dict)
+    .reset_index()
+)
+
+# --------------------------------------------------
+# NORMALIZATION
+# --------------------------------------------------
+
+score_cols = risk_df.columns.drop(company_col)
+
+scaler = MinMaxScaler()
+
+risk_df[score_cols] = scaler.fit_transform(
+    risk_df[score_cols]
+)
+
+# --------------------------------------------------
+# AI RISK SCORE
+# --------------------------------------------------
+
+risk_df["risk_score"] = (
+    risk_df.get("shares_change", 0) * 0.25 +
+    risk_df.get("ownership_percentage", 0) * 0.15 +
+    risk_df.get("anomaly_score", 0) * 0.30 +
+    (1 - risk_df.get("conviction_score", 0)) * 0.30
+)
+
+risk_df["risk_score"] = (
+    risk_df["risk_score"] * 100
+).round(2)
+
+# --------------------------------------------------
+# RISK CATEGORY
+# --------------------------------------------------
+
+def classify(score):
+
+    if score >= 75:
+        return "High Risk"
+
+    elif score >= 50:
+        return "Medium Risk"
+
+    return "Low Risk"
+
+risk_df["risk_category"] = (
+    risk_df["risk_score"]
+    .apply(classify)
+)
+
+# --------------------------------------------------
+# KPIs
+# --------------------------------------------------
+
+st.subheader("📊 Portfolio Risk Summary")
+
+c1, c2, c3, c4 = st.columns(4)
+
+c1.metric(
+    "Companies",
+    f"{len(risk_df):,}"
+)
+
+c2.metric(
+    "High Risk",
+    len(
+        risk_df[
+            risk_df["risk_category"]
+            == "High Risk"
+        ]
+    )
+)
+
+c3.metric(
+    "Medium Risk",
+    len(
+        risk_df[
+            risk_df["risk_category"]
+            == "Medium Risk"
+        ]
+    )
+)
+
+c4.metric(
+    "Low Risk",
+    len(
+        risk_df[
+            risk_df["risk_category"]
+            == "Low Risk"
+        ]
+    )
+)
+
+# --------------------------------------------------
+# RISK DISTRIBUTION
+# --------------------------------------------------
+
+st.subheader("Risk Distribution")
+
+fig1 = px.histogram(
+    risk_df,
+    x="risk_score",
+    nbins=40,
+    title="AI Risk Score Distribution"
 )
 
 st.plotly_chart(
-    fig,
+    fig1,
     use_container_width=True
 )
 
 # --------------------------------------------------
-# RISK FACTOR ANALYSIS
+# CATEGORY BREAKDOWN
 # --------------------------------------------------
 
-st.subheader("Risk Factor Breakdown")
+st.subheader("Risk Categories")
 
-risk_factors = []
-
-# Debt Risk
-if "Debt" in company_df.columns:
-    debt = company["Debt"]
-
-    if debt > 1000000000:
-        debt_risk = 25
-    elif debt > 500000000:
-        debt_risk = 15
-    else:
-        debt_risk = 5
-
-    risk_factors.append(
-        ["Debt Risk", debt_risk]
-    )
-
-# Revenue Growth Risk
-if "RevenueGrowth" in company_df.columns:
-
-    growth = company["RevenueGrowth"]
-
-    if growth < 0:
-        growth_risk = 25
-    elif growth < 5:
-        growth_risk = 15
-    else:
-        growth_risk = 5
-
-    risk_factors.append(
-        ["Revenue Growth Risk", growth_risk]
-    )
-
-# Institutional Ownership Risk
-if "InstitutionalOwnership" in company_df.columns:
-
-    ownership = company["InstitutionalOwnership"]
-
-    if ownership < 20:
-        ownership_risk = 20
-    elif ownership < 40:
-        ownership_risk = 10
-    else:
-        ownership_risk = 5
-
-    risk_factors.append(
-        ["Institutional Ownership Risk", ownership_risk]
-    )
-
-# Insider Activity Risk
-if not insider_df.empty:
-
-    insider_company = insider_df[
-        insider_df["Company"] == selected_company
-    ]
-
-    if (
-        not insider_company.empty
-        and "TransactionType" in insider_company.columns
-    ):
-
-        sell_count = len(
-            insider_company[
-                insider_company["TransactionType"]
-                .astype(str)
-                .str.upper()
-                .str.contains("SELL")
-            ]
-        )
-
-        buy_count = len(
-            insider_company[
-                insider_company["TransactionType"]
-                .astype(str)
-                .str.upper()
-                .str.contains("BUY")
-            ]
-        )
-
-        if sell_count > buy_count:
-            insider_risk = 20
-        else:
-            insider_risk = 5
-
-        risk_factors.append(
-            ["Insider Trading Risk", insider_risk]
-        )
-
-risk_df = pd.DataFrame(
-    risk_factors,
-    columns=["Factor", "Risk"]
+cat_df = (
+    risk_df["risk_category"]
+    .value_counts()
+    .reset_index()
 )
 
-if not risk_df.empty:
-
-    fig = px.bar(
-        risk_df,
-        x="Factor",
-        y="Risk",
-        title="Risk Contributors"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-# --------------------------------------------------
-# COMPANY PROFILE
-# --------------------------------------------------
-
-st.subheader("Company Overview")
-
-overview_cols = st.columns(4)
-
-metrics = [
-    ("Market Cap", "MarketCap"),
-    ("Revenue", "Revenue"),
-    ("Net Income", "NetIncome"),
-    ("Institutional Ownership", "InstitutionalOwnership")
+cat_df.columns = [
+    "Category",
+    "Count"
 ]
 
-for i, (label, col) in enumerate(metrics):
-
-    if col in company_df.columns:
-
-        value = company[col]
-
-        try:
-            formatted = f"{value:,.2f}"
-        except:
-            formatted = str(value)
-
-        overview_cols[i].metric(
-            label,
-            formatted
-        )
-
-st.markdown("---")
-
-# --------------------------------------------------
-# INSIDER RISK ANALYSIS
-# --------------------------------------------------
-
-st.subheader("Insider Activity Analysis")
-
-if not insider_df.empty:
-
-    insider_company = insider_df[
-        insider_df["Company"] == selected_company
-    ]
-
-    if not insider_company.empty:
-
-        st.dataframe(
-            insider_company.tail(20),
-            use_container_width=True
-        )
-
-        if (
-            "TransactionType" in insider_company.columns
-        ):
-
-            transaction_summary = (
-                insider_company
-                .groupby("TransactionType")
-                .size()
-                .reset_index(name="Count")
-            )
-
-            fig = px.pie(
-                transaction_summary,
-                names="TransactionType",
-                values="Count",
-                title="Transaction Distribution"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-# --------------------------------------------------
-# INSTITUTIONAL ANALYSIS
-# --------------------------------------------------
-
-st.subheader("Institutional Holdings Analysis")
-
-if not holdings_df.empty:
-
-    holdings_company = holdings_df[
-        holdings_df["Company"] == selected_company
-    ]
-
-    if not holdings_company.empty:
-
-        st.dataframe(
-            holdings_company,
-            use_container_width=True
-        )
-
-        if (
-            "Institution" in holdings_company.columns
-            and "OwnershipPercent" in holdings_company.columns
-        ):
-
-            fig = px.bar(
-                holdings_company,
-                x="Institution",
-                y="OwnershipPercent",
-                title="Institutional Ownership"
-            )
-
-            st.plotly_chart(
-                fig,
-                use_container_width=True
-            )
-
-# --------------------------------------------------
-# AI NARRATIVE
-# --------------------------------------------------
-
-st.subheader("🤖 AI Risk Assessment")
-
-if risk_score < 30:
-
-    recommendation = """
-### LOW RISK
-
-The company currently exhibits healthy
-financial characteristics and stable
-ownership patterns.
-
-Key Observations:
-
-- Strong institutional support
-- Healthy insider activity
-- Stable growth profile
-
-Action:
-Continue routine monitoring.
-"""
-
-elif risk_score < 60:
-
-    recommendation = """
-### MEDIUM RISK
-
-Several indicators require attention.
-
-Key Observations:
-
-- Moderate insider activity
-- Growth concerns emerging
-- Ownership concentration changing
-
-Action:
-Increase monitoring frequency.
-"""
-
-else:
-
-    recommendation = """
-### HIGH RISK
-
-The company demonstrates elevated
-risk indicators.
-
-Potential Issues:
-
-- Significant insider selling
-- Weak growth trends
-- Debt pressure
-- Institutional outflows
-
-Action:
-Immediate analyst review recommended.
-"""
-
-st.markdown(recommendation)
-
-# --------------------------------------------------
-# RISK RANKING TABLE
-# --------------------------------------------------
-
-st.subheader("Market Risk Ranking")
-
-risk_table = []
-
-for _, row in master_df.iterrows():
-
-    try:
-        score = calculate_risk_score(row)
-    except:
-        score = np.random.randint(20, 80)
-
-    risk_table.append(
-        [
-            row["Company"],
-            score,
-            classify_risk(score)
-        ]
-    )
-
-ranking_df = pd.DataFrame(
-    risk_table,
-    columns=[
-        "Company",
-        "Risk Score",
-        "Category"
-    ]
+fig2 = px.pie(
+    cat_df,
+    names="Category",
+    values="Count",
+    title="Risk Classification"
 )
 
-ranking_df = ranking_df.sort_values(
-    by="Risk Score",
-    ascending=False
-)
-
-st.dataframe(
-    ranking_df,
+st.plotly_chart(
+    fig2,
     use_container_width=True
 )
 
 # --------------------------------------------------
-# DOWNLOAD REPORT
+# TOP RISK COMPANIES
 # --------------------------------------------------
 
-st.markdown("---")
+st.subheader("🚨 Highest Risk Companies")
 
-report = pd.DataFrame({
-    "Company": [selected_company],
-    "Risk Score": [risk_score],
-    "Risk Category": [risk_label],
-    "Status": [status]
-})
+top_risk = (
+    risk_df
+    .sort_values(
+        "risk_score",
+        ascending=False
+    )
+    .head(25)
+)
 
-csv = report.to_csv(
+fig3 = px.bar(
+    top_risk,
+    x=company_col,
+    y="risk_score",
+    color="risk_category",
+    title="Top 25 Highest Risk Companies"
+)
+
+st.plotly_chart(
+    fig3,
+    use_container_width=True
+)
+
+# --------------------------------------------------
+# OPPORTUNITY SCORING
+# --------------------------------------------------
+
+risk_df["opportunity_score"] = (
+    100 - risk_df["risk_score"]
+)
+
+st.subheader("🚀 Opportunity Leaders")
+
+top_opportunity = (
+    risk_df
+    .sort_values(
+        "opportunity_score",
+        ascending=False
+    )
+    .head(20)
+)
+
+fig4 = px.bar(
+    top_opportunity,
+    x=company_col,
+    y="opportunity_score",
+    title="Top Opportunity Companies"
+)
+
+st.plotly_chart(
+    fig4,
+    use_container_width=True
+)
+
+# --------------------------------------------------
+# FILTERS
+# --------------------------------------------------
+
+st.subheader("🔍 Company Explorer")
+
+selected_category = st.selectbox(
+    "Risk Category",
+    ["All"] +
+    sorted(
+        risk_df["risk_category"]
+        .unique()
+        .tolist()
+    )
+)
+
+filtered = risk_df.copy()
+
+if selected_category != "All":
+    filtered = filtered[
+        filtered["risk_category"]
+        == selected_category
+    ]
+
+st.dataframe(
+    filtered.sort_values(
+        "risk_score",
+        ascending=False
+    ),
+    use_container_width=True
+)
+
+# --------------------------------------------------
+# AI INSIGHTS
+# --------------------------------------------------
+
+st.subheader("🤖 AI Generated Insights")
+
+high_risk_count = len(
+    risk_df[
+        risk_df["risk_category"]
+        == "High Risk"
+    ]
+)
+
+avg_risk = risk_df[
+    "risk_score"
+].mean()
+
+st.info(f"""
+Total companies analyzed: {len(risk_df):,}
+
+Average portfolio risk score: {avg_risk:.2f}
+
+High-risk companies detected: {high_risk_count}
+
+The AI Risk Engine combines:
+
+• Conviction Score Analysis
+
+• Institutional Ownership Patterns
+
+• Position Change Trends
+
+• Market Concentration Signals
+
+• Isolation Forest Anomaly Detection
+
+Companies with elevated risk scores may
+require deeper due diligence and monitoring.
+""")
+
+# --------------------------------------------------
+# EXPORT
+# --------------------------------------------------
+
+st.subheader("📥 Export Risk Report")
+
+csv = risk_df.to_csv(
     index=False
 ).encode("utf-8")
 
 st.download_button(
-    label="⬇ Download Risk Report",
-    data=csv,
-    file_name=f"{selected_company}_risk_report.csv",
-    mime="text/csv"
+    "Download AI Risk Report",
+    csv,
+    "ai_risk_engine_report.csv",
+    "text/csv"
 )
-```
-
